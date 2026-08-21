@@ -1,0 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --font-display: 'Oswald', sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #ffffff;
+  color: #0f172a;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ─── OSWALD DISPLAY TYPOGRAPHY ───────────────────────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+h1, h2, h3, h4,
+.font-display,
+.stat-number {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.04;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+p, span, a, input, textarea, select, button, .font-sans {
+  font-family: var(--font-sans);
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ─── DARK MODE CONTRAST & READABILITY GUARANTEES ─────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+.dark body,
+.dark {
+  background-color: #030712 !important;
+  color: #f8fafc !important;
+}
+
+.dark .bg-white {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+.dark .bg-\[\#f8fafc\],
+.dark .bg-\[\#f0faf7\] {
+  background-color: #030712 !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-50\/70,
+.dark .bg-slate-50\/80 {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+.dark .bg-lime-100,
+.dark .bg-lime-50 {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+}
+
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: #ffffff !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-100,
+.dark .border-slate-300 {
+  border-color: #1e293b !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #0b0f19 !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Floating Pill Navigation */
+.nav-pill {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.nav-pill-light {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+.dark .nav-pill-light {
+  background: rgba(11, 15, 25, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+}
+
+/* Smooth Interactive Micro-animations */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Clean Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
