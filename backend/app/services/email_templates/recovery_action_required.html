@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin: 0; padding: 32px 16px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; -webkit-font-smoothing: antialiased;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+    
+    <!-- Brand Header -->
+    <tr>
+      <td style="background-color: #030712; padding: 26px 32px; border-bottom: 1px solid #1e293b;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td>
+              <div style="font-size: 18px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; text-transform: uppercase;">
+                ⚡ {{ merchant_name }}
+              </div>
+              <div style="font-size: 11px; color: #94a3b8; font-family: monospace; margin-top: 3px;">
+                Secured Revenue Recovery &bull; RecoverAI
+              </div>
+            </td>
+            <td align="right">
+              <span style="display: inline-block; background-color: #1e293b; color: #38bdf8; font-size: 10px; font-family: monospace; font-weight: 700; padding: 4px 10px; border-radius: 9999px; text-transform: uppercase;">
+                Action Required
+              </span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Body Content -->
+    <tr>
+      <td style="padding: 36px 32px;">
+        
+        <h1 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.3;">
+          {{ headline }}
+        </h1>
+
+        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
+          Hi <strong>{{ customer_name }}</strong>,
+        </p>
+
+        <p style="font-size: 14px; line-height: 1.65; color: #475569; margin: 0 0 24px 0;">
+          {{ body }}
+        </p>
+
+        <!-- Payment Details Summary Box -->
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; margin-bottom: 28px;">
+          <tr>
+            <td style="padding: 20px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 11px; font-family: monospace; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+                      Amount Due
+                    </div>
+                    <div style="font-size: 26px; font-weight: 900; color: #0f172a; font-family: monospace; margin-top: 4px;">
+                      {{ currency_symbol }}{{ amount }}
+                    </div>
+                  </td>
+                  <td align="right">
+                    <div style="font-size: 11px; font-family: monospace; font-weight: 700; color: #64748b; text-transform: uppercase;">
+                      Payment Reference
+                    </div>
+                    <div style="font-size: 12px; font-family: monospace; color: #334155; font-weight: 600; margin-top: 4px;">
+                      {{ payment_id }}
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding-top: 14px; border-top: 1px solid #e2e8f0; margin-top: 14px;">
+                    <div style="font-size: 12px; color: #64748b;">
+                      <strong>Reason:</strong> {{ failure_reason }}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Primary CTA Button -->
+        <div style="text-align: center; margin: 32px 0 24px 0;">
+          <a href="{{ payment_update_url }}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 15px 36px; border-radius: 9999px; text-decoration: none; font-weight: 700; font-size: 14px; letter-spacing: 0.2px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);">
+            {{ cta_text }} &rarr;
+          </a>
+        </div>
+
+        <!-- Direct Link Backup -->
+        <div style="background-color: #f8fafc; border-radius: 10px; padding: 12px; margin-top: 20px; font-size: 11px; color: #64748b; line-height: 1.5; word-break: break-all;">
+          <strong>Secure Link:</strong><br>
+          <a href="{{ payment_update_url }}" style="color: #2563eb; text-decoration: underline;">{{ payment_update_url }}</a>
+        </div>
+
+        <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 24px 0 0 0; padding-top: 16px; border-top: 1px solid #f1f5f9;">
+          If you have already updated your payment details, please disregard this notice. Need assistance? Contact our support team at <a href="mailto:{{ support_email }}" style="color: #2563eb; text-decoration: none;">{{ support_email }}</a>.
+        </p>
+
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background-color: #f8fafc; padding: 22px 32px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.6;">
+        Powered by <strong>RecoverAI</strong> &bull; Non-intrusive Autonomous Recovery<br>
+        256-bit Encrypted Checkout &bull; No sensitive card numbers are stored
+      </td>
+    </tr>
+
+  </table>
+</body>
+</html>

@@ -131,6 +131,11 @@ class GeminiService:
         - Decline Category: {failure_type}
         - Email Type: {email_type}
 
+        CRITICAL CONSTRAINTS:
+        - Must contain ONLY polite, user-friendly business English.
+        - NEVER mention: SMTP, Brevo, API keys, IP addresses, whitelisting, FastAPI, LangGraph, Gemini, Groq, Supabase, backend errors, status codes, database IDs, or infrastructure details.
+        - Emphasize uninterrupted service, zero blame, and clear instructions.
+
         Compose:
         1. subject: Engaging, non-threatening subject line
         2. headline: Reassuring title (e.g., 'Action Needed: Update Payment Method')

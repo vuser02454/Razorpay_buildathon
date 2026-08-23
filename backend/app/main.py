@@ -28,6 +28,7 @@ app.include_router(auth_router, prefix=f"{settings.API_PREFIX}/auth", tags=["Aut
 app.include_router(assistant_router, prefix=f"{settings.API_PREFIX}/assistant", tags=["AI Assistant"])
 app.include_router(razorpay_router, prefix=f"{settings.API_PREFIX}/razorpay", tags=["Razorpay Gateway"])
 app.include_router(communication_router, prefix=f"{settings.API_PREFIX}/recovery/email", tags=["Brevo SMTP Delivery"])
+app.include_router(communication_router, prefix=f"{settings.API_PREFIX}/recovery", tags=["Recovery Emails"])
 app.include_router(api_router, prefix=settings.API_PREFIX, tags=["Recovery Engine"])
 
 # Direct top-level test email route: POST /api/email/test

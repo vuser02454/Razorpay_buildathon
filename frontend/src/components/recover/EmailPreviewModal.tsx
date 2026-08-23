@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, X, Send, Loader2, Sparkles, CheckCircle2, AlertTriangle, ShieldCheck, Edit3 } from 'lucide-react';
+import { Mail, X, Send, Loader2, CheckCircle2, ShieldCheck, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Payment, EmailPreviewResponse } from '../../types';
 
@@ -23,6 +23,8 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
   const [sending, setSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticDetails, setDiagnosticDetails] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     if (isOpen && payment) {
@@ -31,6 +33,8 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
     } else {
       setSendSuccess(null);
       setError(null);
+      setDiagnosticDetails(null);
+      setShowDiagnostics(false);
     }
   }, [isOpen, payment, emailType]);
 
@@ -42,7 +46,8 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
       const res = await api.previewEmail(payment.id, emailType);
       setPreview(res);
     } catch (e: any) {
-      setError(e.message || 'Failed to generate preview');
+      setError('Unable to load email preview. Please try again.');
+      setDiagnosticDetails(e.message || null);
     } finally {
       setLoading(false);
     }
@@ -52,6 +57,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
     if (!payment) return;
     setSending(true);
     setError(null);
+    setDiagnosticDetails(null);
     const targetEmail = recipientEmail.trim() || payment.customer?.email || 'vvijwal01@gmail.com';
     try {
       const res = await api.sendEmail(
@@ -61,13 +67,15 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
         emailType
       );
       if (res.success) {
-        setSendSuccess(`✓ Recovery email sent to ${targetEmail} via Brevo SMTP`);
+        setSendSuccess(`✓ Recovery email successfully dispatched to ${targetEmail}`);
         if (onEmailSent) onEmailSent();
       } else {
-        setError(res.message || 'Brevo SMTP email delivery failed');
+        setError('Unable to send the email. Check email service configuration.');
+        setDiagnosticDetails(res.message || 'Delivery provider connection or configuration issue.');
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to dispatch email');
+      setError('Unable to send the email. Check email service configuration.');
+      setDiagnosticDetails(e.message || 'Network exception during email dispatch.');
     } finally {
       setSending(false);
     }
@@ -90,8 +98,8 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 <h3 className="text-base font-extrabold text-slate-950 dark:text-white font-display">
                   Transactional Email Preview
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
-                  Brevo SMTP + Gemini
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 font-bold">
+                  Secure Delivery Engine
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -135,6 +143,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
               <option value="PAYMENT_UPDATE_REQUIRED">Payment Update Required</option>
               <option value="PAYMENT_FAILED">Payment Failed Notice</option>
               <option value="RETRY_SCHEDULED">Automated Retry Scheduled</option>
+              <option value="PAYMENT_RECOVERED">Payment Recovered Receipt</option>
               <option value="FINAL_RECOVERY_NOTICE">Final Recovery Notice</option>
             </select>
           </div>
@@ -145,11 +154,30 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-3">
               <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-              <span className="text-xs text-slate-500 font-medium">Generating Gemini personalized copy...</span>
+              <span className="text-xs text-slate-500 font-medium">Generating email preview...</span>
             </div>
           ) : error ? (
-            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
-              {error}
+            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs space-y-2">
+              <div className="flex items-center gap-2 font-bold">
+                <AlertCircle className="w-4 h-4 text-rose-500" />
+                <span>{error}</span>
+              </div>
+              {diagnosticDetails && (
+                <div className="pt-2 border-t border-rose-200/50 dark:border-rose-800/50">
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <span>{showDiagnostics ? 'Hide Technical Diagnostics' : 'View Technical Diagnostics'}</span>
+                    {showDiagnostics ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                  {showDiagnostics && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-black/40 font-mono text-[10px] text-rose-200 break-all">
+                      {diagnosticDetails}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : preview ? (
             <div className="space-y-4">
@@ -157,7 +185,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
               <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400 font-mono text-[10px]">SUBJECT:</span>
-                  <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">AI Empathetic Tone</span>
+                  <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Customer Safe</span>
                 </div>
                 <div className="font-bold text-slate-900 dark:text-white">{preview.subject}</div>
               </div>
@@ -179,8 +207,9 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 {sendSuccess}
               </span>
             ) : (
-              <span className="text-[11px] font-mono text-slate-400">
-                Delivery Provider: <strong>Brevo SMTP Relay (Port 587)</strong>
+              <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
+                <span>Delivery: <strong>Port 587 (STARTTLS)</strong></span>
               </span>
             )}
           </div>
