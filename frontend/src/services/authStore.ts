@@ -17,7 +17,8 @@ const STORAGE_KEY = 'recoverai_auth_session';
 export const authStore = {
   getSession(): AuthSession | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
+      // Use sessionStorage so every fresh browser session starts on the Login Page
+      const data = sessionStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : null;
     } catch {
       return null;
@@ -25,10 +26,12 @@ export const authStore = {
   },
 
   setSession(session: AuthSession) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    localStorage.removeItem(STORAGE_KEY);
   },
 
   clearSession() {
+    sessionStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_KEY);
   },
 
