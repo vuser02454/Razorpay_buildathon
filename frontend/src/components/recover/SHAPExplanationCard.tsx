@@ -97,11 +97,11 @@ export const SHAPExplanationCard: React.FC<SHAPExplanationCardProps> = ({
   const netImpact = finalProbPct - baseProbPct;
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 shadow-inner text-white">
+    <div className="p-3.5 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 shadow-inner text-white">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-lime-400/15 border border-lime-400/30 flex items-center justify-center text-lime-300">
+          <div className="w-7 h-7 rounded-xl bg-lime-400/15 border border-lime-400/30 flex items-center justify-center text-lime-300 shrink-0">
             <BarChart3 className="w-3.5 h-3.5" />
           </div>
           <div>
@@ -115,28 +115,28 @@ export const SHAPExplanationCard: React.FC<SHAPExplanationCardProps> = ({
         </div>
 
         <div className="text-right">
-          <span className="text-[10px] font-mono uppercase text-slate-400 block">Baseline</span>
-          <span className="text-xs font-mono font-bold text-slate-300">{baseProbPct}%</span>
+          <span className="text-[9px] sm:text-[10px] font-mono uppercase text-slate-400 block">Baseline</span>
+          <span className="text-xs sm:text-sm font-mono font-bold text-slate-300">{baseProbPct}%</span>
         </div>
       </div>
 
       {/* Probability Waterfall Walkthrough */}
-      <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between text-xs font-mono">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 grid grid-cols-3 gap-1 sm:gap-2 text-xs font-mono text-center">
         <div>
-          <span className="text-[10px] text-slate-400 uppercase block">Population Baseline</span>
-          <strong className="text-slate-300 text-sm">{baseProbPct}%</strong>
+          <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase block truncate">Population Base</span>
+          <strong className="text-slate-300 text-xs sm:text-sm">{baseProbPct}%</strong>
         </div>
 
-        <div className="text-center px-2">
-          <span className="text-[10px] text-slate-400 uppercase block">Customer Factors</span>
-          <strong className={`text-sm ${netImpact >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        <div className="px-1 border-x border-slate-800/80">
+          <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase block truncate">Customer Factors</span>
+          <strong className={`text-xs sm:text-sm font-bold ${netImpact >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             {netImpact >= 0 ? `+${netImpact}%` : `${netImpact}%`}
           </strong>
         </div>
 
-        <div className="text-right">
-          <span className="text-[10px] text-lime-300 uppercase block font-bold">Predicted Probability</span>
-          <strong className="text-lime-300 text-base font-black">{finalProbPct}%</strong>
+        <div>
+          <span className="text-[9px] sm:text-[10px] text-lime-300 uppercase block font-bold truncate">Predicted Prob</span>
+          <strong className="text-lime-300 text-sm sm:text-base font-black">{finalProbPct}%</strong>
         </div>
       </div>
 

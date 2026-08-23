@@ -141,6 +141,18 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
     }
   };
 
+  const handleSelectPayment = (p: Payment) => {
+    setSelectedPayment(p);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setTimeout(() => {
+        const el = document.getElementById('recovery-analysis-drawer');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 50);
+    }
+  };
+
   const handleRunAnalysis = async () => {
     if (!selectedPayment) return;
     setAnalyzing(true);
@@ -534,7 +546,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                   return (
                     <div
                       key={p.id}
-                      onClick={() => setSelectedPayment(p)}
+                      onClick={() => handleSelectPayment(p)}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer ${isSelected
                           ? 'bg-slate-950 text-white border-slate-950 dark:border-slate-600 shadow-md scale-[1.01]'
                           : 'bg-slate-50/80 dark:bg-slate-950/60 border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-900 dark:text-white'
@@ -610,7 +622,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         </div>
 
         {/* Right Side: AI Decision Drawer & LangGraph Workflow State */}
-        <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-24">
+        <div id="recovery-analysis-drawer" className="lg:col-span-5 space-y-4 lg:sticky lg:top-24 scroll-mt-24">
           {selectedPayment ? (
             <div className="p-4 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-5 animate-fade-up">
               {/* Top Drawer Title */}
