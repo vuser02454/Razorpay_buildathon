@@ -6,8 +6,7 @@ import {
   SHAPExplanationResponse, SHAPFeatureContribution
 } from '../types';
 import { authStore } from './authStore';
-
-const API_BASE = '/api';
+import { API_BASE } from './config';
 
 function getAuthHeaders(): HeadersInit {
   const token = authStore.getToken();

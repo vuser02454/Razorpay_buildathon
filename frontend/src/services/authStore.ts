@@ -1,3 +1,5 @@
+import { API_BASE } from './config';
+
 export interface AdminProfile {
   id: string;
   email: string;
@@ -48,7 +50,7 @@ export const authStore = {
   },
 
   async login(email: string, password: string): Promise<AdminProfile> {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -63,7 +65,7 @@ export const authStore = {
   },
 
   async loginDemo(): Promise<AdminProfile> {
-    const res = await fetch('/api/auth/demo', {
+    const res = await fetch(`${API_BASE}/auth/demo`, {
       method: 'POST',
     });
     if (!res.ok) {
@@ -75,7 +77,7 @@ export const authStore = {
   },
 
   async signup(name: string, email: string, password: string): Promise<AdminProfile> {
-    const res = await fetch('/api/auth/signup', {
+    const res = await fetch(`${API_BASE}/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
@@ -92,7 +94,7 @@ export const authStore = {
   async logout(): Promise<void> {
     const token = this.getToken();
     if (token) {
-      await fetch('/api/auth/logout', {
+      await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
