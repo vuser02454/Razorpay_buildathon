@@ -159,6 +159,85 @@ p, span, a, input, textarea, select, button, .font-sans {
   color: #f8fafc;
 }
 
+/* ═══════════════════════════════════════════════════════════ */
+/* ─── 3-LAYER THEMATIC CARDS (LIGHT & DARK MODE) ──────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+.card-lime {
+  background-color: #f7fee7;
+  border: 1px solid #d9f99d;
+  color: #14532d;
+}
+
+.card-sky {
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0c4a6e;
+}
+
+.card-sage {
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #064e3b;
+}
+
+.dark .card-lime,
+.dark .card-sky,
+.dark .card-sage {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.dark .card-lime h3,
+.dark .card-sky h3,
+.dark .card-sage h3,
+.dark .card-lime span,
+.dark .card-sky span,
+.dark .card-sage span {
+  color: #ffffff !important;
+}
+
+.dark .card-lime p,
+.dark .card-sky p,
+.dark .card-sage p {
+  color: #cbd5e1 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ─── MOBILE VIEWPORT & TOUCH DIMENSIONS ──────────────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Prevent horizontal scrolling glitches on mobile */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Safe tap target sizes */
+  button, a {
+    min-height: 38px;
+    touch-action: manipulation;
+  }
+
+  /* Responsive table wrapper */
+  .table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Compact padding on mobile container */
+  .mobile-compact-container {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+}
+
 /* Smooth Interactive Micro-animations */
 @keyframes fadeUp {
   from {
@@ -193,3 +272,4 @@ p, span, a, input, textarea, select, button, .font-sans {
 .dark ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
 }
+

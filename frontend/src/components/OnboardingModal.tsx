@@ -50,8 +50,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-fade-in">
-      <div className="w-full max-w-2xl glass-panel rounded-2xl border border-slate-700/80 shadow-2xl p-6 relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-3 sm:p-4 animate-fade-in overflow-y-auto">
+      <div className="w-full max-w-2xl glass-panel rounded-2xl border border-slate-700/80 shadow-2xl p-4 sm:p-6 relative max-h-[92vh] overflow-y-auto">
         {/* Step Indicator */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
           <div className="flex items-center gap-2">

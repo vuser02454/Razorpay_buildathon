@@ -325,10 +325,10 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         </div>
 
         {/* 5 Prominent High-Contrast KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold">RECOVERED REVENUE</div>
-            <div className="text-2xl font-black text-slate-950 dark:text-white font-mono">
+            <div className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white font-mono">
               ₹{(kpis?.recovered_revenue || 0).toLocaleString()}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
@@ -336,9 +336,9 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
             </div>
           </div>
 
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold">RECOVERY RATE</div>
-            <div className="text-2xl font-black text-slate-950 dark:text-white font-mono">
+            <div className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white font-mono">
               {kpis?.recovery_rate || 0}%
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400">
@@ -346,9 +346,9 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
             </div>
           </div>
 
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold">PENDING RECOVERY</div>
-            <div className="text-2xl font-black text-slate-950 dark:text-white font-mono">
+            <div className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white font-mono">
               ₹{(kpis?.revenue_at_risk || 0).toLocaleString()}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400">
@@ -356,9 +356,9 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
             </div>
           </div>
 
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold">PAYMENTS ANALYZED</div>
-            <div className="text-2xl font-black text-slate-950 dark:text-white font-mono">
+            <div className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white font-mono">
               {kpis?.failed_payments_count || 0}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400">
@@ -366,9 +366,9 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
             </div>
           </div>
 
-          <div className="col-span-2 md:col-span-1 p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
+          <div className="col-span-2 sm:col-span-1 p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold">POLICY BLOCKS</div>
-            <div className="text-2xl font-black text-slate-950 dark:text-white font-mono">
+            <div className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white font-mono">
               {currentAdmin?.is_demo ? '47' : '0'}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
@@ -556,9 +556,9 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         </div>
 
         {/* Right Side: AI Decision Drawer & LangGraph Workflow State */}
-        <div className="lg:col-span-5 space-y-4 sticky top-24">
+        <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-24">
           {selectedPayment ? (
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-5 animate-fade-up">
+            <div className="p-4 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-5 animate-fade-up">
               {/* Top Drawer Title */}
               <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                 <div>
@@ -808,10 +808,14 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                   <button
                     onClick={() => handleSimulateRetry('success')}
                     disabled={retrying}
-                    className="flex-1 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 px-3 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     {retrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                    <span>SIMULATE SUCCESSFUL RETRY (+{sym(selectedPayment)}{selectedPayment.amount.toLocaleString()})</span>
+                    <span>
+                      <span className="hidden sm:inline">SIMULATE SUCCESSFUL RETRY </span>
+                      <span className="sm:hidden">RETRY SUCCESS </span>
+                      (+{sym(selectedPayment)}{selectedPayment.amount.toLocaleString()})
+                    </span>
                   </button>
 
                   <button

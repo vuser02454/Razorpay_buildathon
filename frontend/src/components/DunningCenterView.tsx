@@ -38,8 +38,8 @@ export const DunningCenterView: React.FC = () => {
         <p className="text-xs text-slate-400">{events.length} failure-specific communications • AI-personalized messaging</p>
       </div>
 
-      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-        <table className="w-full text-xs">
+      <div className="glass-panel rounded-2xl border border-slate-800 overflow-x-auto">
+        <table className="w-full text-xs min-w-[640px]">
           <thead>
             <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
               <th className="text-left px-4 py-3 font-semibold">Customer</th>

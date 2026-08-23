@@ -10,7 +10,7 @@ export const AIAssistantButton: React.FC<AIAssistantButtonProps> = ({ isOpen, on
   if (isOpen) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 animate-fade-up">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 animate-fade-up">
       <button
         onClick={onClick}
         className="group relative flex items-center gap-2.5 px-5 py-3 rounded-full bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold text-xs shadow-2xl border border-slate-700 dark:border-slate-300 hover:scale-105 transition-all duration-300 cursor-pointer"

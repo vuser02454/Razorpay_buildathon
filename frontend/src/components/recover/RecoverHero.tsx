@@ -34,24 +34,24 @@ export const RecoverHero: React.FC<RecoverHeroProps> = ({
 
         {/* Large Editorial Headline with "RecoverAI" at Middle then Quote (Requested by User) */}
         <div className="space-y-4">
-          <h1 className="text-6xl sm:text-8xl md:text-9xl font-black tracking-tight text-white uppercase font-display leading-[0.95]">
+          <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tight text-white uppercase font-display leading-[0.95] break-words">
             RecoverAI
           </h1>
           
-          <div className="text-2xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tight font-display">
+          <div className="text-xl sm:text-3xl md:text-5xl font-black text-white uppercase tracking-tight font-display">
             “Recover revenue intelligently. Not blindly.”
           </div>
 
-          <p className="text-base sm:text-lg md:text-xl text-slate-300 max-w-3xl mx-auto font-normal leading-relaxed pt-1">
+          <p className="text-sm sm:text-base md:text-lg text-slate-300 max-w-3xl mx-auto font-normal leading-relaxed pt-1 px-2">
             Turn failed subscription payments into intelligent recovery decisions with AI-powered payment triage, policy-controlled retries, and closed-loop learning.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-1">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1 w-full max-w-md sm:max-w-none mx-auto">
           <button
             onClick={onLaunchEngine}
-            className="w-full sm:w-auto px-9 py-4 rounded-full bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-sm sm:text-base transition-all duration-200 shadow-2xl hover:scale-105 flex items-center justify-center gap-2.5 cursor-pointer"
+            className="w-full sm:w-auto px-7 sm:px-9 py-3.5 sm:py-4 rounded-full bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-xs sm:text-sm md:text-base transition-all duration-200 shadow-2xl hover:scale-105 flex items-center justify-center gap-2.5 cursor-pointer"
           >
             <span>LAUNCH RECOVERY ENGINE</span>
             <ArrowRight className="w-4 h-4" />
@@ -59,7 +59,7 @@ export const RecoverHero: React.FC<RecoverHeroProps> = ({
 
           <button
             onClick={onTryDemo}
-            className="w-full sm:w-auto px-7 py-4 rounded-full bg-white/15 hover:bg-white/25 border border-white/30 text-white font-extrabold text-sm sm:text-base transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full sm:w-auto px-6 sm:px-7 py-3.5 sm:py-4 rounded-full bg-white/15 hover:bg-white/25 border border-white/30 text-white font-extrabold text-xs sm:text-sm md:text-base transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-white" />
             <span>TRY DEMO</span>
@@ -67,7 +67,7 @@ export const RecoverHero: React.FC<RecoverHeroProps> = ({
 
           <button
             onClick={onExploreHowItWorks}
-            className="w-full sm:w-auto px-6 py-4 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-xl text-white font-bold text-sm sm:text-base transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full sm:w-auto px-5 sm:px-6 py-3.5 sm:py-4 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-xl text-white font-bold text-xs sm:text-sm md:text-base transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <Play className="w-4 h-4 fill-white" />
             <span>SEE HOW IT WORKS</span>
@@ -75,57 +75,57 @@ export const RecoverHero: React.FC<RecoverHeroProps> = ({
         </div>
 
         {/* Live Payment-Recovery Lifecycle Visualization Bar */}
-        <div className="pt-6 max-w-4xl mx-auto">
-          <div className="p-5 sm:p-7 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-slate-700/90 shadow-2xl text-left">
-            <div className="flex items-center justify-between text-xs font-mono text-slate-400 uppercase tracking-wider mb-4">
-              <span className="flex items-center gap-2 font-extrabold text-white text-xs sm:text-sm">
-                <Sparkles className="w-4 h-4 text-lime-400" />
-                Live Payment Recovery Stream
+        <div className="pt-4 sm:pt-6 max-w-4xl mx-auto w-full">
+          <div className="p-4 sm:p-7 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-slate-700/90 shadow-2xl text-left">
+            <div className="flex items-center justify-between text-xs font-mono text-slate-400 uppercase tracking-wider mb-3 sm:mb-4">
+              <span className="flex items-center gap-1.5 sm:gap-2 font-extrabold text-white text-xs sm:text-sm">
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-lime-400" />
+                Live Payment Stream
               </span>
-              <span className="text-white font-extrabold text-xs flex items-center gap-1.5">
+              <span className="text-white font-extrabold text-[11px] sm:text-xs flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 Active Sandbox
               </span>
             </div>
 
             {/* Stepper Flow Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 text-center">
-              <div className="p-3.5 rounded-2xl bg-rose-950/50 border border-rose-700/50 shadow-inner">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 text-center">
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-rose-950/50 border border-rose-700/50 shadow-inner">
                 <div className="text-[10px] text-rose-400 font-mono font-bold">01 FAILED</div>
-                <div className="text-base font-black text-white font-mono mt-1">₹2,000</div>
+                <div className="text-sm sm:text-base font-black text-white font-mono mt-0.5 sm:mt-1">₹2,000</div>
                 <div className="text-[10px] text-slate-400 truncate mt-0.5">Insufficient Funds</div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-indigo-950/50 border border-indigo-700/50 shadow-inner">
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-indigo-950/50 border border-indigo-700/50 shadow-inner">
                 <div className="text-[10px] text-indigo-400 font-mono font-bold">02 AI TRIAGE</div>
-                <div className="text-xs sm:text-sm font-extrabold text-white mt-1">LangGraph</div>
+                <div className="text-xs sm:text-sm font-extrabold text-white mt-0.5 sm:mt-1">LangGraph</div>
                 <div className="text-[10px] text-slate-400 mt-0.5">7 Node Audit</div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-blue-950/50 border border-blue-700/50 shadow-inner">
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-blue-950/50 border border-blue-700/50 shadow-inner">
                 <div className="text-[10px] text-blue-400 font-mono font-bold">03 CLASSIFY</div>
-                <div className="text-xs sm:text-sm font-extrabold text-blue-200 mt-1">SOFT DECLINE</div>
+                <div className="text-xs sm:text-sm font-extrabold text-blue-200 mt-0.5 sm:mt-1">SOFT DECLINE</div>
                 <div className="text-[10px] text-slate-400 mt-0.5">Non-stolen card</div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-purple-950/50 border border-purple-700/50 shadow-inner">
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-purple-950/50 border border-purple-700/50 shadow-inner">
                 <div className="text-[10px] text-purple-400 font-mono font-bold">04 PREDICT</div>
-                <div className="text-base font-black text-purple-200 font-mono mt-1">74%</div>
+                <div className="text-sm sm:text-base font-black text-purple-200 font-mono mt-0.5 sm:mt-1">74%</div>
                 <div className="text-[10px] text-slate-400 mt-0.5">Recovery Prob.</div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-amber-950/50 border border-amber-700/50 shadow-inner">
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-amber-950/50 border border-amber-700/50 shadow-inner">
                 <div className="text-[10px] text-amber-400 font-mono font-bold">05 WINDOW</div>
-                <div className="text-xs sm:text-sm font-extrabold text-amber-200 mt-1">09:30 AM</div>
+                <div className="text-xs sm:text-sm font-extrabold text-amber-200 mt-0.5 sm:mt-1">09:30 AM</div>
                 <div className="text-[10px] text-slate-400 mt-0.5">Optimal Retry</div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/60 shadow-xl shadow-emerald-500/10">
+              <div className="col-span-2 sm:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/60 shadow-xl shadow-emerald-500/10">
                 <div className="text-[10px] text-emerald-400 font-mono font-bold flex items-center justify-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   RECOVERED
                 </div>
-                <div className="text-base font-black text-emerald-300 font-mono mt-1">+₹2,000</div>
+                <div className="text-sm sm:text-base font-black text-emerald-300 font-mono mt-0.5 sm:mt-1">+₹2,000</div>
                 <div className="text-[10px] text-emerald-400/90 mt-0.5">Closed Loop OK</div>
               </div>
             </div>
