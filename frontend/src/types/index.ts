@@ -34,6 +34,33 @@ export interface DecisionFactors {
   policy_constraint_applied?: string;
 }
 
+export interface SHAPFeatureContribution {
+  feature: string;
+  feature_name: string;
+  value: any;
+  display_value: string;
+  shap_value: number;
+  impact: 'positive' | 'negative' | 'neutral';
+  impact_percent: number;
+  rank: number;
+}
+
+export interface SHAPExplanationResponse {
+  available: boolean;
+  reason?: string | null;
+  payment_id?: string | null;
+  model_version: string;
+  recovery_probability: number;
+  recovery_probability_percent: number;
+  base_probability: number;
+  base_probability_percent: number;
+  net_customer_impact_percent: number;
+  top_positive_factors: SHAPFeatureContribution[];
+  top_negative_factors: SHAPFeatureContribution[];
+  all_factors: SHAPFeatureContribution[];
+  natural_language_summary?: string | null;
+}
+
 export interface AIDecision {
   id: string;
   payment_id: string;
@@ -44,6 +71,8 @@ export interface AIDecision {
   recommended_retry_time?: string;
   explanation: string;
   decision_factors: DecisionFactors;
+  shap_explanation?: SHAPExplanationResponse;
+  model_version?: string;
   requires_human_review: boolean;
   human_approval_status: string;
   agent_version: string;

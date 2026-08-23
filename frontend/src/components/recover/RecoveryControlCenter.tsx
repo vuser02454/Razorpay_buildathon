@@ -35,6 +35,7 @@ import { authStore } from '../../services/authStore';
 import { EmailPreviewModal } from './EmailPreviewModal';
 import { LangGraphVisualizerModal } from './LangGraphVisualizerModal';
 import { RazorpayConnectModal } from '../integrations/RazorpayConnectModal';
+import { SHAPExplanationCard } from './SHAPExplanationCard';
 import { AIStatusPanel } from '../AIStatusPanel';
 
 interface RecoveryControlCenterProps {
@@ -669,6 +670,13 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                   <span>{analyzing ? 'Running LangGraph Agent...' : 'Run AI Recovery Analysis'}</span>
                 </button>
               )}
+
+              {/* Explainable AI (SHAP TreeExplainer Attribution Panel) */}
+              <SHAPExplanationCard
+                paymentId={selectedPayment.id}
+                initialExplanation={selectedPayment.latest_decision?.shap_explanation}
+                customerName={selectedPayment.customer?.name}
+              />
 
               {/* Customer Communication (Brevo SMTP Outgoing Dunning Section) */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">

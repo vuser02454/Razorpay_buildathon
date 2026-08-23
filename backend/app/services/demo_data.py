@@ -7,6 +7,7 @@ from app.models.schemas import (
     FailureType, RecoveryAction, PaymentStatus, CustomerSegment, RetryAttempt,
     DunningEvent, WorkflowStep
 )
+from app.services.shap_service import shap_service
 
 # Realistic Indian and Global Customer Names
 NAMES = [
@@ -213,9 +214,20 @@ def generate_demo_dataset() -> Dict[str, Any]:
             else:
                 status = PaymentStatus.FAILED
                 
-        # Calculate AI Decision
-        prob = round(min(0.96, max(0.04, pattern["prob_base"] + (cust.historical_success_rate - 0.9) * 0.5 + random.uniform(-0.06, 0.06))), 2)
-        confidence = round(min(0.98, max(0.65, 0.82 + (0.1 if cust.tenure_months > 6 else -0.05) + random.uniform(-0.04, 0.05))), 2)
+        # Calculate SHAP explainability and ML Recovery Decision
+        payment_dict = {
+            "id": p_id,
+            "amount": amount,
+            "retry_count": 1 if status == PaymentStatus.RECOVERED else 0,
+            "failure_type": pattern["type"].value,
+            "payment_method": {"type": pm.type},
+            "time_since_failure_hours": float(created_days_ago * 24.0),
+            "customer_name": cust.name
+        }
+        shap_explanation = shap_service.explain_payment(payment_dict, cust.model_dump(), pattern["type"].value)
+        
+        prob = shap_explanation.recovery_probability if shap_explanation.available else round(min(0.96, max(0.04, pattern["prob_base"] + (cust.historical_success_rate - 0.9) * 0.5)), 2)
+        confidence = round(min(0.98, max(0.65, 0.82 + (0.1 if cust.tenure_months > 6 else -0.05))), 2)
         requires_human = (amount >= 10000.0 and confidence < 0.75) or (status == PaymentStatus.IN_REVIEW)
         
         retry_time = (created_time + timedelta(days=1, hours=random.randint(9, 14))).isoformat() if pattern["action"] in [RecoveryAction.RETRY, RecoveryAction.WAIT_AND_RETRY] else None
@@ -228,7 +240,7 @@ def generate_demo_dataset() -> Dict[str, Any]:
             recovery_probability=prob,
             confidence=confidence,
             recommended_retry_time=retry_time,
-            explanation=pattern["explanation"],
+            explanation=shap_explanation.natural_language_summary or pattern["explanation"],
             decision_factors=DecisionFactors(
                 failure_type=pattern["type"].value,
                 historical_success_rate=cust.historical_success_rate,
@@ -239,9 +251,11 @@ def generate_demo_dataset() -> Dict[str, Any]:
                 optimal_time_slot="Tomorrow 09:30 AM",
                 network_retry_safe=pattern["is_retryable"]
             ),
+            shap_explanation=shap_explanation,
+            model_version=shap_explanation.model_version,
             requires_human_review=requires_human,
             human_approval_status="pending" if requires_human else "not_required",
-            agent_version="v1.2-langgraph",
+            agent_version="v2.0-langgraph-shap",
             created_at=created_time.isoformat()
         )
         

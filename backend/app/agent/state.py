@@ -28,10 +28,12 @@ class RecoveryState(TypedDict, total=False):
     failure_type: str  # SOFT_DECLINE, HARD_DECLINE, CREDENTIAL_ISSUE, NETWORK_TIMEOUT, etc.
     classification: Optional[FailureType] # Schema compatibility
 
-    # Node Output 2: Recovery Probability & ML Confidence
+    # Node Output 2: Recovery Probability & ML Confidence & SHAP Explainability
     recovery_probability: float # 0.0 to 1.0 (or 0 to 100)
     confidence: float # 0.0 to 1.0
     recommended_retry_time: Optional[str]
+    shap_explanation: Optional[Dict[str, Any]]
+    model_version: Optional[str]
 
     # Node Output 3: Deterministic Policy Safety Gate
     policy_decision: str # RETRY_ELIGIBLE, BLOCKED_STOLEN, BLOCKED_EXPIRED, HUMAN_REVIEW_REQUIRED, MAX_RETRIES_EXCEEDED

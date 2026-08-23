@@ -51,6 +51,34 @@ class DecisionFactors(BaseModel):
     network_retry_safe: bool
     policy_constraint_applied: Optional[str] = None
 
+class SHAPFeatureContribution(BaseModel):
+    feature: str
+    feature_name: str
+    value: Any
+    display_value: str
+    shap_value: float
+    impact: str # "positive" | "negative" | "neutral"
+    impact_percent: int
+    rank: int
+
+class SHAPExplanationResponse(BaseModel):
+    available: bool = True
+    reason: Optional[str] = None
+    payment_id: Optional[str] = None
+    model_version: str = "recovery-model-v1"
+    recovery_probability: float = 0.50
+    recovery_probability_percent: int = 50
+    base_probability: float = 0.51
+    base_probability_percent: int = 51
+    net_customer_impact_percent: int = 0
+    top_positive_factors: List[SHAPFeatureContribution] = []
+    top_negative_factors: List[SHAPFeatureContribution] = []
+    all_factors: List[SHAPFeatureContribution] = []
+    natural_language_summary: Optional[str] = None
+
+class ExplainRecoveryRequest(BaseModel):
+    payment_id: str
+
 class AIDecision(BaseModel):
     id: str
     payment_id: str
@@ -61,6 +89,8 @@ class AIDecision(BaseModel):
     recommended_retry_time: Optional[str] = None
     explanation: str
     decision_factors: DecisionFactors
+    shap_explanation: Optional[SHAPExplanationResponse] = None
+    model_version: str = "recovery-model-v1"
     requires_human_review: bool = False
     human_approval_status: str = "not_required" # not_required, pending, approved, rejected
     agent_version: str = "RecoverAI-LangGraph-v2.0"

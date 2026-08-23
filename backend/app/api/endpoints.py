@@ -5,12 +5,14 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from app.models.schemas import (
     Payment, AIDecision, DecisionFactors, DunningEvent, MerchantPolicy,
     SimulateFailureRequest, SimulateRetryRequest, PaymentStatus, RecoveryAction,
-    WorkflowStep, FailureType, Customer, PaymentMethod, PaymentFailure, CustomerSegment
+    WorkflowStep, FailureType, Customer, PaymentMethod, PaymentFailure, CustomerSegment,
+    SHAPExplanationResponse, ExplainRecoveryRequest
 )
 from app.db.store import store, DEMO_ADMIN_ID
 from app.agent.graph import recovery_graph_app
 from app.services.payment.mock_provider import MockPaymentProvider
 from app.services.payment.razorpay_provider import RazorpayProvider
+from app.services.shap_service import shap_service
 from app.core.config import settings
 from app.api.auth import get_current_admin, AdminProfile
 
@@ -105,6 +107,47 @@ async def ai_recovery_probability(payload: Dict[str, Any], admin: AdminProfile =
         "is_card_expired": p.payment_method.is_expired if (p and p.payment_method) else payload.get("is_card_expired", False),
     }
     return await AIRouter.calculate_recovery_probability(ctx, admin_id=admin.id)
+
+@router.post("/ai/explain-recovery", response_model=SHAPExplanationResponse)
+async def ai_explain_recovery(
+    payload: ExplainRecoveryRequest,
+    admin: AdminProfile = Depends(get_current_admin)
+):
+    """
+    Explainable AI (XAI) Endpoint:
+    Returns mathematical SHAP feature attributions for a given payment recovery prediction.
+    Enforces tenant isolation and validates admin authorization.
+    """
+    p = store.get_payment_by_id(payload.payment_id, admin_id=admin.id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment record not found")
+
+    payment_dict = p.model_dump()
+    customer_dict = p.customer.model_dump() if p.customer else {}
+
+    explanation = shap_service.explain_payment(
+        payment=payment_dict,
+        customer=customer_dict,
+        failure_type_str=p.failure.failure_type.value if (p.failure and p.failure.failure_type) else None
+    )
+
+    # Record AI interaction activity in audit log
+    store.record_ai_activity(
+        provider="shap_xai",
+        operation="feature_attribution_explanation",
+        admin_id=admin.id,
+        payment_id=p.id,
+        success=explanation.available,
+        metadata={
+            "model_version": explanation.model_version,
+            "recovery_probability": explanation.recovery_probability,
+            "base_probability": explanation.base_probability,
+            "top_positive": [f.feature for f in explanation.top_positive_factors[:2]],
+            "top_negative": [f.feature for f in explanation.top_negative_factors[:2]]
+        }
+    )
+
+    return explanation
 
 @router.post("/ai/generate-dunning")
 async def ai_generate_dunning(payload: Dict[str, Any], admin: AdminProfile = Depends(get_current_admin)):

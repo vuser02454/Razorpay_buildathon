@@ -2,7 +2,8 @@ import {
   DashboardKPIs, Payment, AIDecision, DunningEvent, ExperimentStats,
   ClosedLoopMetric, MerchantPolicy, RazorpayConnectionStatus,
   RazorpayVerificationResponse, RazorpayVerifyOTPResponse, RazorpayTestConnectionResponse,
-  RecoveryCommunication, EmailPreviewResponse, EmailSendResponse
+  RecoveryCommunication, EmailPreviewResponse, EmailSendResponse,
+  SHAPExplanationResponse, SHAPFeatureContribution
 } from '../types';
 import { authStore } from './authStore';
 
@@ -235,6 +236,19 @@ export const api = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to disconnect Razorpay');
+    return res.json();
+  },
+
+  async getRecoveryExplanation(paymentId: string): Promise<SHAPExplanationResponse> {
+    const res = await fetch(`${API_BASE}/ai/explain-recovery`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_id: paymentId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'Failed to fetch SHAP explainability analysis');
+    }
     return res.json();
   },
 
