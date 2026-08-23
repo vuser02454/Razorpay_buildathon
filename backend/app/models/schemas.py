@@ -207,9 +207,48 @@ class RazorpayConnectionStatus(BaseModel):
     is_connected: bool = False
     account_id: Optional[str] = None
     merchant_name: Optional[str] = None
+    merchant_email: Optional[str] = None
     last_synced_at: Optional[str] = None
+    last_verified_at: Optional[str] = None
     status: str = "disconnected" # connected, disconnected, syncing, error
     auth_url: Optional[str] = None
+    permissions: List[str] = [
+        "Payment monitoring",
+        "Payment status",
+        "Payment recovery data"
+    ]
+
+class RazorpayVerificationRequest(BaseModel):
+    email: str
+
+class RazorpayVerificationResponse(BaseModel):
+    success: bool
+    message: str
+    masked_email: Optional[str] = None
+    resend_cooldown_seconds: int = 45
+
+class RazorpayVerifyOTPRequest(BaseModel):
+    email: str
+    otp: str
+
+class RazorpayVerifyOTPResponse(BaseModel):
+    success: bool
+    verified: bool
+    message: str
+    remaining_attempts: Optional[int] = None
+
+class RazorpayAuthorizeRequest(BaseModel):
+    email: str
+    account_id: Optional[str] = None
+    merchant_name: Optional[str] = None
+
+class RazorpayTestConnectionResponse(BaseModel):
+    success: bool
+    status: str
+    message: str
+    latency_ms: int = 42
+    account_id: Optional[str] = None
+    merchant_email: Optional[str] = None
 
 class EmailPreviewRequest(BaseModel):
     payment_id: str

@@ -34,6 +34,7 @@ import { Payment, DashboardKPIs, RazorpayConnectionStatus, RecoveryCommunication
 import { authStore } from '../../services/authStore';
 import { EmailPreviewModal } from './EmailPreviewModal';
 import { LangGraphVisualizerModal } from './LangGraphVisualizerModal';
+import { RazorpayConnectModal } from '../integrations/RazorpayConnectModal';
 import { AIStatusPanel } from '../AIStatusPanel';
 
 interface RecoveryControlCenterProps {
@@ -52,6 +53,9 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
   const [simulatingTest, setSimulatingTest] = useState(false);
   const [syncingRazorpay, setSyncingRazorpay] = useState(false);
   const [connectingRazorpay, setConnectingRazorpay] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [testingGateway, setTestingGateway] = useState(false);
+  const [testStatusMsg, setTestStatusMsg] = useState<string | null>(null);
   const [quickSendingEmail, setQuickSendingEmail] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [graphModalOpen, setGraphModalOpen] = useState(false);
@@ -265,63 +269,112 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         </div>
 
         {/* Razorpay Gateway Multi-Tenant Connection Banner Card */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center border shadow-xs ${razorpayStatus?.is_connected
-                ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
-              }`}>
-              <CreditCard className="w-5 h-5" />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono uppercase font-bold text-slate-400">PAYMENT GATEWAY</span>
-                <span className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md ${razorpayStatus?.is_connected
-                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
-                    : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}>
-                  {razorpayStatus?.is_connected ? '● Razorpay Connected' : '○ Razorpay Not Connected'}
-                </span>
+        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center border shadow-xs ${razorpayStatus?.is_connected
+                  ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+                }`}>
+                <CreditCard className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                {razorpayStatus?.is_connected
-                  ? `Account: ${razorpayStatus.account_id || 'rzp_account_live'} • Last synchronized: ${razorpayStatus.last_synced_at ? new Date(razorpayStatus.last_synced_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}`
-                  : 'Connect your Razorpay account to allow RecoverAI to analyze real payment failures.'}
-              </p>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono uppercase font-bold text-slate-400">PAYMENT GATEWAY</span>
+                  <span className={`inline-flex items-center gap-1.5 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${razorpayStatus?.is_connected
+                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                      : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}>
+                    {razorpayStatus?.is_connected ? (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>✓ Razorpay Connected</span>
+                      </>
+                    ) : (
+                      <span>○ Razorpay Not Connected</span>
+                    )}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                  {razorpayStatus?.is_connected
+                    ? `Merchant: ${razorpayStatus.merchant_email || currentAdmin?.email || 'merchant@example.com'} • Account: ${razorpayStatus.account_id || 'rzp_account_live'} • Status: CONNECTED`
+                    : 'Connect your Razorpay merchant account to allow RecoverAI to analyze real payment failures.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {razorpayStatus?.is_connected ? (
+                <>
+                  <button
+                    onClick={async () => {
+                      setTestingGateway(true);
+                      try {
+                        const res = await api.testRazorpayConnection();
+                        setTestStatusMsg(`${res.message} (${res.latency_ms}ms)`);
+                        setTimeout(() => setTestStatusMsg(null), 4000);
+                      } catch {
+                        setTestStatusMsg('Connection test timed out.');
+                        setTimeout(() => setTestStatusMsg(null), 4000);
+                      } finally {
+                        setTestingGateway(false);
+                      }
+                    }}
+                    disabled={testingGateway}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs transition cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingGateway ? 'animate-spin' : ''}`} />
+                    <span>{testingGateway ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleSyncRazorpay}
+                    disabled={syncingRazorpay}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-950 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-950 font-bold text-xs shadow-sm transition cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingRazorpay ? 'animate-spin' : ''}`} />
+                    <span>{syncingRazorpay ? 'Syncing...' : 'Sync Payments'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleDisconnectRazorpay}
+                    className="p-2 rounded-full hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                    title="Disconnect Razorpay"
+                  >
+                    <Unlink className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowConnectModal(true)}
+                  disabled={connectingRazorpay}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+                >
+                  <LinkIcon className="w-3.5 h-3.5" />
+                  <span>Connect Razorpay</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {razorpayStatus?.is_connected ? (
-              <>
-                <button
-                  onClick={handleSyncRazorpay}
-                  disabled={syncingRazorpay}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-950 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-950 font-bold text-xs shadow-sm transition cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncingRazorpay ? 'animate-spin' : ''}`} />
-                  <span>{syncingRazorpay ? 'Syncing Razorpay...' : 'Sync Payments'}</span>
-                </button>
-                <button
-                  onClick={handleDisconnectRazorpay}
-                  className="p-2 rounded-full hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                  title="Disconnect Razorpay"
-                >
-                  <Unlink className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={handleConnectRazorpay}
-                disabled={connectingRazorpay}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
-              >
-                {connectingRazorpay ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LinkIcon className="w-3.5 h-3.5" />}
-                <span>Connect Razorpay</span>
-              </button>
-            )}
-          </div>
+          {/* Connected Details & Permissions Banner */}
+          {razorpayStatus?.is_connected && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[10px] uppercase font-bold text-slate-400">Active Permissions:</span>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-700 dark:text-slate-300">Payment monitoring</span>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-700 dark:text-slate-300">Payment status</span>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-700 dark:text-slate-300">Payment recovery data</span>
+              </div>
+
+              {testStatusMsg && (
+                <div className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400 animate-fade-up">
+                  {testStatusMsg}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 5 Prominent High-Contrast KPI Cards */}
@@ -858,6 +911,17 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         onClose={() => setGraphModalOpen(false)}
         payment={selectedPayment}
         initialNodeId={selectedGraphNodeId}
+      />
+
+      {/* 3-Minute Razorpay Secure Email Verification & Gateway Connect Modal */}
+      <RazorpayConnectModal
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        initialEmail={currentAdmin?.email || ''}
+        onSuccess={async (newStatus) => {
+          setRazorpayStatus(newStatus);
+          await fetchDashboardData();
+        }}
       />
     </div>
   );

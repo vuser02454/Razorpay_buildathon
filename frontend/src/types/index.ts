@@ -114,9 +114,35 @@ export interface RazorpayConnectionStatus {
   is_connected: boolean;
   account_id?: string | null;
   merchant_name?: string | null;
+  merchant_email?: string | null;
   last_synced_at?: string | null;
+  last_verified_at?: string | null;
   status: 'connected' | 'disconnected' | 'syncing' | 'error' | string;
   auth_url?: string | null;
+  permissions?: string[];
+}
+
+export interface RazorpayVerificationResponse {
+  success: boolean;
+  message: string;
+  masked_email?: string;
+  resend_cooldown_seconds: number;
+}
+
+export interface RazorpayVerifyOTPResponse {
+  success: boolean;
+  verified: boolean;
+  message: string;
+  remaining_attempts?: number;
+}
+
+export interface RazorpayTestConnectionResponse {
+  success: boolean;
+  status: string;
+  message: string;
+  latency_ms: number;
+  account_id?: string | null;
+  merchant_email?: string | null;
 }
 
 export interface RecoveryCommunication {

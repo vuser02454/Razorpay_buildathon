@@ -522,6 +522,41 @@ class EmailService:
         )
 
     @classmethod
+    def send_verification_otp_email(
+        cls,
+        to_email: str,
+        otp: str,
+        expires_in_minutes: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Sends the 6-digit RecoverAI verification OTP for Razorpay integration connection via Brevo SMTP.
+        Subject: RecoverAI — Your verification code
+        """
+        subject = "RecoverAI — Your verification code"
+        context = {
+            "otp": otp,
+            "expires_in_minutes": str(expires_in_minutes),
+            "subject": subject,
+            "customer_name": "Merchant",
+            "merchant_name": "RecoverAI"
+        }
+        html_content = TemplateManager.render_template("merchant_verification_otp", context)
+        text_content = (
+            f"RecoverAI\n\n"
+            f"Verify your Razorpay connection\n\n"
+            f"Your RecoverAI verification code is: {otp}\n\n"
+            f"This code expires in {expires_in_minutes} minutes.\n\n"
+            f"If you didn't request this verification, you can safely ignore this email."
+        )
+        return cls._dispatch_smtp(
+            to_email=to_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            email_type=EmailType.TEST_EMAIL
+        )
+
+    @classmethod
     def render_email_preview(
         cls,
         email_type: Union[EmailType, str],

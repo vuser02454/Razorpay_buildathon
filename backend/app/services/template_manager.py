@@ -45,6 +45,9 @@ class TemplateManager:
         "final_recovery_notice": "final_notice.html",
         "final_notice": "final_notice.html",
         "test_email": "test_email.html",
+        "merchant_verification_otp": "merchant_verification_otp.html",
+        "otp_verification": "merchant_verification_otp.html",
+        "verification_code": "merchant_verification_otp.html",
     }
 
     DEFAULT_CONTEXT = {
@@ -61,7 +64,9 @@ class TemplateManager:
         "headline": "Action Required: Update Payment Method",
         "body": "We could not complete your recent subscription payment. To keep your subscription active without interruption, please update your payment method.",
         "cta_text": "Update Payment Method",
-        "subject": "Action required: Update your payment method"
+        "subject": "Action required: Update your payment method",
+        "otp": "123456",
+        "expires_in_minutes": "5"
     }
 
     @classmethod

@@ -1,6 +1,7 @@
 import {
   DashboardKPIs, Payment, AIDecision, DunningEvent, ExperimentStats,
   ClosedLoopMetric, MerchantPolicy, RazorpayConnectionStatus,
+  RazorpayVerificationResponse, RazorpayVerifyOTPResponse, RazorpayTestConnectionResponse,
   RecoveryCommunication, EmailPreviewResponse, EmailSendResponse
 } from '../types';
 import { authStore } from './authStore';
@@ -137,15 +138,75 @@ export const api = {
   },
 
   async getRazorpayStatus(): Promise<RazorpayConnectionStatus> {
-    const res = await fetch(`${API_BASE}/razorpay/status`, {
+    const res = await fetch(`${API_BASE}/integrations/razorpay/status`, {
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to fetch Razorpay connection status');
+    if (!res.ok) {
+      // Fallback to /razorpay/status
+      const fb = await fetch(`${API_BASE}/razorpay/status`, { headers: getAuthHeaders() });
+      if (!fb.ok) throw new Error('Failed to fetch Razorpay connection status');
+      return fb.json();
+    }
+    return res.json();
+  },
+
+  async requestRazorpayVerification(email: string): Promise<RazorpayVerificationResponse> {
+    const res = await fetch(`${API_BASE}/integrations/razorpay/request-verification`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Unable to send verification code. Please try again.');
+    }
+    return res.json();
+  },
+
+  async verifyRazorpayOTP(email: string, otp: string): Promise<RazorpayVerifyOTPResponse> {
+    const res = await fetch(`${API_BASE}/integrations/razorpay/verify`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Invalid or expired verification code.');
+    }
+    return res.json();
+  },
+
+  async authorizeRazorpay(
+    email: string,
+    accountId?: string,
+    merchantName?: string
+  ): Promise<{ success: boolean; message: string; connection: RazorpayConnectionStatus }> {
+    const res = await fetch(`${API_BASE}/integrations/razorpay/authorize`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, account_id: accountId, merchant_name: merchantName }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'Razorpay authorization was not completed. You can try again.');
+    }
+    return res.json();
+  },
+
+  async testRazorpayConnection(): Promise<RazorpayTestConnectionResponse> {
+    const res = await fetch(`${API_BASE}/integrations/razorpay/test-connection`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Connection test failed. Please try again.');
+    }
     return res.json();
   },
 
   async connectRazorpay(): Promise<{ success: boolean; message: string; connection: RazorpayConnectionStatus }> {
-    const res = await fetch(`${API_BASE}/razorpay/connect`, {
+    const res = await fetch(`${API_BASE}/integrations/razorpay/connect`, {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to connect Razorpay');
