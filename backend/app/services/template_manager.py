@@ -59,7 +59,7 @@ class TemplateManager:
         "failure_reason": "Saved payment card has expired or requires renewal",
         "recovery_probability": "75%",
         "retry_time": "09:30 AM",
-        "payment_update_url": "http://localhost:5173/update-payment",
+        "payment_update_url": "https://share.google/IhXXtpGBbnNE8J5DV",
         "support_email": "support@recoverai.ai",
         "headline": "Action Required: Update Payment Method",
         "body": "We could not complete your recent subscription payment. To keep your subscription active without interruption, please update your payment method.",

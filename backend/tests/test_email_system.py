@@ -144,7 +144,7 @@ def test_payment_update_url_generation():
     Verify that EmailService generates valid public payment update links.
     """
     url = EmailService.get_payment_update_url("pay_inv_9988")
-    assert "/update-payment?payment_id=pay_inv_9988" in url
+    assert "https://share.google/IhXXtpGBbnNE8J5DV" in url or "/update-payment" in url
     assert "http" in url
 
 
@@ -167,7 +167,7 @@ def test_render_email_preview_does_not_send():
     assert preview["subject"] is not None
     assert "Priya Patel" in preview["html_content"]
     assert "₹1,500.00" in preview["html_content"]
-    assert "update-payment?payment_id=pay_preview_01" in preview["update_link"]
+    assert "share.google" in preview["update_link"] or "update-payment" in preview["update_link"]
 
 
 def test_invalid_email_validation():

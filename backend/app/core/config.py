@@ -15,7 +15,7 @@ class Settings(BaseModel):
     
     # Environment & Demo Mode
     IS_DEMO_MODE: bool = os.getenv("IS_DEMO_MODE", "true").lower() == "true"
-    FRONTEND_PUBLIC_URL: str = os.getenv("FRONTEND_PUBLIC_URL", "http://localhost:5173")
+    FRONTEND_PUBLIC_URL: str = os.getenv("FRONTEND_PUBLIC_URL", "https://share.google/IhXXtpGBbnNE8J5DV")
     
     # Supabase Credentials
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")

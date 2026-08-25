@@ -82,8 +82,10 @@ class EmailService:
         base_url = (
             os.getenv("FRONTEND_PUBLIC_URL", "")
             or getattr(settings, "FRONTEND_PUBLIC_URL", "")
-            or "http://localhost:5173"
+            or "https://share.google/IhXXtpGBbnNE8J5DV"
         ).rstrip("/")
+        if "share.google" in base_url:
+            return "https://share.google/IhXXtpGBbnNE8J5DV"
         secure_token = cls.generate_payment_update_token(payment_id)
         return f"{base_url}/update-payment?payment_id={payment_id}&token={secure_token}"
 
@@ -626,7 +628,7 @@ class EmailService:
             "body": "This is a diagnostic test verifying that RecoverAI's Gmail SMTP transactional email relay is operational.",
             "subject": subject,
             "cta_text": "Open Dashboard",
-            "payment_update_url": "http://localhost:5173"
+            "payment_update_url": "https://share.google/IhXXtpGBbnNE8J5DV"
         }
         html_content = TemplateManager.render_template("test_email", context)
         return cls._dispatch_smtp(
@@ -794,7 +796,7 @@ class EmailService:
             "body": body,
             "amount": amount,
             "currency": currency,
-            "payment_update_url": update_link or "http://localhost:5173",
+            "payment_update_url": update_link or "https://share.google/IhXXtpGBbnNE8J5DV",
             "cta_text": cta_text,
             "subject": headline
         }

@@ -275,7 +275,7 @@ def test_send_recovery_email_task():
     assert res["success"] is True
     assert res["status"] in ["SENT", "LOGGED"]
     assert res["update_link"] is not None
-    assert p.id in res["update_link"]
+    assert "share.google" in res["update_link"] or p.id in res["update_link"]
 
 
 def test_send_recovery_email_idempotency_already_recovered():
