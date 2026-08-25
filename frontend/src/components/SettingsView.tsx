@@ -4,12 +4,14 @@ import { api } from '../services/api';
 import { MerchantPolicy, RazorpayConnectionStatus } from '../types';
 import { AIStatusPanel } from './AIStatusPanel';
 import { RazorpayConnectModal } from './integrations/RazorpayConnectModal';
+import { RazorpayGatewayModal } from './integrations/RazorpayGatewayModal';
 
 export const SettingsView: React.FC = () => {
   const [policy, setPolicy] = useState<MerchantPolicy | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(true);
   const [razorpayStatus, setRazorpayStatus] = useState<RazorpayConnectionStatus | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [testingGateway, setTestingGateway] = useState(false);
   const [testResultMsg, setTestResultMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -96,6 +98,13 @@ export const SettingsView: React.FC = () => {
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${testingGateway ? 'animate-spin' : ''}`} />
                   <span>{testingGateway ? 'Testing...' : 'Test Connection'}</span>
+                </button>
+                <button
+                  onClick={() => setShowCheckoutModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Open Checkout</span>
                 </button>
                 <button
                   onClick={handleDisconnect}
@@ -195,12 +204,30 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3-Minute Razorpay Secure Email Verification & Gateway Connect Modal */}
+      {/* Razorpay Secure Email Verification & Gateway Connect Modal */}
       <RazorpayConnectModal
         isOpen={showConnectModal}
         onClose={() => setShowConnectModal(false)}
         onSuccess={(newStatus) => {
           setRazorpayStatus(newStatus);
+        }}
+      />
+
+      {/* In-App Interactive Razorpay Gateway Modal */}
+      <RazorpayGatewayModal
+        isOpen={showCheckoutModal}
+        onClose={() => setShowCheckoutModal(false)}
+        amount={2500}
+        currency="INR"
+        merchantName="RecoverAI Merchant Store"
+        description="Razorpay Live Gateway Verification Test"
+        customerName={razorpayStatus?.merchant_email?.split('@')[0] || 'Merchant Admin'}
+        customerEmail={razorpayStatus?.merchant_email || 'admin@company.com'}
+        keyId={razorpayStatus?.key_id}
+        onSuccess={(details) => {
+          setShowCheckoutModal(false);
+          setTestResultMsg(`✓ Live Razorpay Payment Captured! (ID: ${details.razorpay_payment_id})`);
+          setTimeout(() => setTestResultMsg(null), 5000);
         }}
       />
     </div>

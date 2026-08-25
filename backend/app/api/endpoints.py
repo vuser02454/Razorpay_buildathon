@@ -6,15 +6,22 @@ from app.models.schemas import (
     Payment, AIDecision, DecisionFactors, DunningEvent, MerchantPolicy,
     SimulateFailureRequest, SimulateRetryRequest, PaymentStatus, RecoveryAction,
     WorkflowStep, FailureType, Customer, PaymentMethod, PaymentFailure, CustomerSegment,
-    SHAPExplanationResponse, ExplainRecoveryRequest
+    SHAPExplanationResponse, ExplainRecoveryRequest, ScheduleRetryRequest, ScheduleEmailRequest,
+    RecoveryJob, RecoveryJobStatus
 )
 from app.db.store import store, DEMO_ADMIN_ID
 from app.agent.graph import recovery_graph_app
+from app.tasks.recovery_tasks import (
+    schedule_payment_retry,
+    send_recovery_email,
+    process_recovery_outcome,
+)
 from app.services.payment.mock_provider import MockPaymentProvider
 from app.services.payment.razorpay_provider import RazorpayProvider
 from app.services.shap_service import shap_service
 from app.core.config import settings
 from app.api.auth import get_current_admin, AdminProfile
+
 
 router = APIRouter()
 mock_payment_svc = MockPaymentProvider()
@@ -53,9 +60,22 @@ def health_openrouter():
 def health_langgraph():
     return AIRouter.get_provider_health("langgraph")
 
+@router.get("/health/celery")
+def health_celery():
+    return AIRouter.get_provider_health("celery")
+
+@router.get("/health/redis")
+def health_redis():
+    return AIRouter.get_provider_health("redis")
+
+@router.get("/health/gmail")
 @router.get("/health/brevo")
-def health_brevo():
-    return AIRouter.get_provider_health("brevo")
+def health_gmail():
+    return AIRouter.get_provider_health("gmail")
+
+@router.get("/health/razorpay")
+def health_razorpay():
+    return AIRouter.get_provider_health("razorpay")
 
 @router.get("/health/supabase")
 def health_supabase():
@@ -66,10 +86,11 @@ def health_supabase():
 def get_system_and_ai_status():
     """
     Developer/Admin diagnostic endpoint to inspect operational connectivity
-    of Gemini, Groq, OpenRouter, LangGraph, Brevo SMTP, and Supabase.
+    of Gemini, Groq, OpenRouter, LangGraph, Celery, Redis, Gmail SMTP, Razorpay, and Supabase.
     Zero key exposure.
     """
     return AIRouter.get_services_status()
+
 
 # ─── DEDICATED AI ROUTER ENDPOINTS ──────────────────────────────────────────
 
@@ -324,6 +345,53 @@ def run_ai_recovery_analysis(payload: Dict[str, Any], admin: AdminProfile = Depe
     )
 
     payment.latest_decision = decision
+
+    # Schedule background automation job via Celery if approved and not requiring human approval
+    scheduled_job = None
+    next_action_str = graph_result.get("next_action", "STOP")
+    
+    if not graph_result.get("requires_human_review", False):
+        if next_action_str == "RETRY":
+            job = store.record_recovery_job(
+                admin_id=admin.id,
+                payment_id=payment.id,
+                task_type="schedule_payment_retry",
+                status="SCHEDULED",
+                scheduled_at=graph_result.get("recommended_retry_time", "09:30 AM")
+            )
+            # Dispatch Celery background task
+            try:
+                task_res = schedule_payment_retry.delay(
+                    payment_id=payment.id,
+                    admin_id=admin.id,
+                    scheduled_at=graph_result.get("recommended_retry_time", "09:30 AM"),
+                    recovery_execution_id=job["id"]
+                )
+                job["celery_task_id"] = task_res.id
+                payment.status = PaymentStatus.SCHEDULED
+            except Exception as e:
+                job["error"] = str(e)
+            scheduled_job = job
+
+        elif next_action_str == "CUSTOMER_ACTION":
+            job = store.record_recovery_job(
+                admin_id=admin.id,
+                payment_id=payment.id,
+                task_type="send_recovery_email",
+                status="QUEUED"
+            )
+            try:
+                task_res = send_recovery_email.delay(
+                    payment_id=payment.id,
+                    admin_id=admin.id,
+                    recovery_execution_id=job["id"]
+                )
+                job["celery_task_id"] = task_res.id
+                payment.status = PaymentStatus.IN_REVIEW
+            except Exception as e:
+                job["error"] = str(e)
+            scheduled_job = job
+
     return {
         "success": True,
         "payment_id": payment.id,
@@ -337,10 +405,128 @@ def run_ai_recovery_analysis(payload: Dict[str, Any], admin: AdminProfile = Depe
         "email_sent": graph_result.get("email_sent", False),
         "outcome": graph_result.get("outcome", "RETRY_SCHEDULED"),
         "recommended_retry_time": graph_result.get("recommended_retry_time", "09:30 AM"),
+        "job": scheduled_job,
         "decision": decision,
         "payment": payment,
         "graph_state": graph_result,
         "audit_trail": graph_result.get("audit_trail", [])
+    }
+
+@router.post("/recovery/schedule-retry")
+def schedule_payment_retry_endpoint(
+    req: ScheduleRetryRequest,
+    admin: AdminProfile = Depends(get_current_admin)
+):
+    """
+    Explicitly schedules a background payment retry job via Celery and Redis.
+    Enforces tenant isolation and policy safety gates.
+    """
+    payment = store.get_payment_by_id(req.payment_id, admin_id=admin.id)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment record not found or tenant access denied.")
+
+    # Record job in tracking store
+    job = store.record_recovery_job(
+        admin_id=admin.id,
+        payment_id=payment.id,
+        task_type="schedule_payment_retry",
+        status="SCHEDULED",
+        scheduled_at=req.scheduled_at or "09:30 AM"
+    )
+
+    try:
+        task_res = schedule_payment_retry.delay(
+            payment_id=payment.id,
+            admin_id=admin.id,
+            scheduled_at=req.scheduled_at,
+            recovery_execution_id=job["id"]
+        )
+        job["celery_task_id"] = task_res.id
+        payment.status = PaymentStatus.SCHEDULED
+    except Exception as e:
+        job["status"] = "FAILED"
+        job["error"] = str(e)
+
+    return {
+        "success": True,
+        "message": f"Payment retry scheduled via Celery for {req.scheduled_at or 'optimal clearing window'}",
+        "job": job,
+        "payment": payment
+    }
+
+@router.post("/recovery/schedule-email")
+def schedule_recovery_email_endpoint(
+    req: ScheduleEmailRequest,
+    admin: AdminProfile = Depends(get_current_admin)
+):
+    """
+    Dispatches a transactional recovery email in the background via Celery and Gmail SMTP.
+    Enforces tenant isolation and prevents duplicate customer notifications.
+    """
+    payment = store.get_payment_by_id(req.payment_id, admin_id=admin.id)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment record not found or tenant access denied.")
+
+    job = store.record_recovery_job(
+        admin_id=admin.id,
+        payment_id=payment.id,
+        task_type="send_recovery_email",
+        status="QUEUED"
+    )
+
+    try:
+        task_res = send_recovery_email.delay(
+            payment_id=payment.id,
+            admin_id=admin.id,
+            recovery_execution_id=job["id"]
+        )
+        job["celery_task_id"] = task_res.id
+        payment.status = PaymentStatus.IN_REVIEW
+    except Exception as e:
+        job["status"] = "FAILED"
+        job["error"] = str(e)
+
+    return {
+        "success": True,
+        "message": "Recovery email job queued via Celery",
+        "job": job,
+        "payment": payment
+    }
+
+@router.get("/recovery/jobs/{job_id}")
+def get_recovery_job_endpoint(
+    job_id: str,
+    admin: AdminProfile = Depends(get_current_admin)
+):
+    """
+    Returns the real-time lifecycle status of a background Celery recovery job.
+    Enforces strict tenant isolation.
+    """
+    job = store.get_recovery_job(job_id, admin_id=admin.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Recovery job not found or tenant access denied.")
+    return {
+        "success": True,
+        "job": job
+    }
+
+@router.get("/recovery/jobs")
+def list_recovery_jobs_endpoint(
+    payment_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    admin: AdminProfile = Depends(get_current_admin)
+):
+    """
+    Lists background Celery recovery automation jobs for the authenticated merchant admin.
+    """
+    if payment_id:
+        jobs = store.get_recovery_jobs_for_payment(payment_id, admin_id=admin.id)
+    else:
+        jobs = store.get_recovery_jobs(admin_id=admin.id, limit=limit)
+    return {
+        "success": True,
+        "total": len(jobs),
+        "jobs": jobs
     }
 
 @router.post("/recovery/execute")
@@ -363,26 +549,59 @@ def execute_recovery_action(payload: Dict[str, str], admin: AdminProfile = Depen
     action = decision.recommended_action
     
     if action in [RecoveryAction.RETRY, RecoveryAction.WAIT_AND_RETRY]:
-        provider = get_active_payment_provider()
-        res = provider.retry_charge(payment.id, payment.amount, payment.currency)
-        if res.get("status") == "success":
-            payment.status = PaymentStatus.RECOVERED
-        else:
-            payment.retry_count += 1
-            if payment.retry_count >= payment.max_retries:
-                payment.status = PaymentStatus.EXHAUSTED
-            else:
-                payment.status = PaymentStatus.FAILED
-    elif action == RecoveryAction.CUSTOMER_ACTION_DUNNING:
+        # Execute background retry task via Celery
+        job = store.record_recovery_job(
+            admin_id=admin.id,
+            payment_id=payment.id,
+            task_type="schedule_payment_retry",
+            status="RUNNING"
+        )
+        task_res = schedule_payment_retry.delay(
+            payment_id=payment.id,
+            admin_id=admin.id,
+            recovery_execution_id=job["id"]
+        )
+        job["celery_task_id"] = task_res.id
+        return {
+            "success": True,
+            "message": f"Action {action.value} dispatched to Celery background worker",
+            "job": job,
+            "payment": payment
+        }
+    elif action in [RecoveryAction.CUSTOMER_ACTION, RecoveryAction.CUSTOMER_ACTION_DUNNING]:
+        job = store.record_recovery_job(
+            admin_id=admin.id,
+            payment_id=payment.id,
+            task_type="send_recovery_email",
+            status="QUEUED"
+        )
+        task_res = send_recovery_email.delay(
+            payment_id=payment.id,
+            admin_id=admin.id,
+            recovery_execution_id=job["id"]
+        )
+        job["celery_task_id"] = task_res.id
         payment.status = PaymentStatus.IN_REVIEW
+        return {
+            "success": True,
+            "message": "Dunning email dispatched to Celery background worker",
+            "job": job,
+            "payment": payment
+        }
     elif action == RecoveryAction.DO_NOT_RETRY:
-        payment.status = PaymentStatus.EXHAUSTED
+        payment.status = PaymentStatus.CHURNED
+        return {
+            "success": True,
+            "message": "Payment marked as do_not_retry (churned)",
+            "payment": payment
+        }
 
     return {
         "success": True,
-        "message": f"Action {action.value} dispatched",
+        "message": f"Action {action.value} processed",
         "payment": payment
     }
+
 
 @router.post("/recovery/{payment_id}/approve")
 def approve_human_review(payment_id: str, admin: AdminProfile = Depends(get_current_admin)):

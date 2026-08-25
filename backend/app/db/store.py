@@ -57,6 +57,8 @@ class DataStore:
         }
         self.closed_loop_history: List[Dict[str, Any]] = []
         self.audit_logs: List[Dict[str, Any]] = []
+        self.recovery_jobs: Dict[str, Dict[str, Any]] = {} # job_id -> recovery job record
+        self.ai_activity_logs: List[Dict[str, Any]] = []
         self.initialize_demo_data()
 
     def initialize_demo_data(self):
@@ -83,8 +85,8 @@ class DataStore:
             channel="email",
             email_type=EmailType.PAYMENT_UPDATE_REQUIRED,
             subject="Payment update required for your ₹2,000 subscription",
-            provider="brevo",
-            provider_message_id="msg_brevo_99201948",
+            provider="gmail",
+            provider_message_id="msg_gmail_99201948",
             status="SENT",
             created_at=datetime.now(timezone.utc).isoformat(),
             sent_at=datetime.now(timezone.utc).isoformat()
@@ -101,7 +103,7 @@ class DataStore:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "event": "system_initialized",
             "admin_id": DEMO_ADMIN_ID,
-            "details": "RecoverAI demo dataset initialized with Brevo SMTP email delivery and 320 records."
+            "details": "RecoverAI demo dataset initialized with Gmail SMTP transactional email delivery and 320 records."
         })
 
     def get_communications(self, admin_id: str, payment_id: Optional[str] = None) -> List[RecoveryCommunication]:
@@ -118,7 +120,7 @@ class DataStore:
         customer_name: str,
         customer_email: str,
         subject: str,
-        provider: str = "brevo",
+        provider: str = "gmail",
         provider_message_id: Optional[str] = None,
         status: str = "SENT",
         error_message: Optional[str] = None,
@@ -301,6 +303,7 @@ class DataStore:
         return RazorpayConnectionStatus(
             is_connected=True,
             account_id=conn.get("account_id"),
+            key_id=conn.get("key_id") or settings.RAZORPAY_KEY_ID,
             merchant_name=conn.get("merchant_name"),
             merchant_email=conn.get("merchant_email"),
             last_synced_at=conn.get("last_synced_at"),
@@ -320,11 +323,21 @@ class DataStore:
         access_token: str,
         refresh_token: Optional[str] = None,
         merchant_name: Optional[str] = "Live Merchant Gateway",
-        merchant_email: Optional[str] = None
+        merchant_email: Optional[str] = None,
+        key_id: Optional[str] = None,
+        key_secret: Optional[str] = None
     ) -> RazorpayConnectionStatus:
         now_str = datetime.now(timezone.utc).isoformat()
+        
+        # If live/test API keys provided, apply to settings
+        if key_id:
+            settings.RAZORPAY_KEY_ID = key_id
+        if key_secret:
+            settings.RAZORPAY_KEY_SECRET = key_secret
+            
         self.razorpay_connections[admin_id] = {
             "account_id": account_id,
+            "key_id": key_id or settings.RAZORPAY_KEY_ID,
             "merchant_name": merchant_name or "Live Merchant Gateway",
             "merchant_email": merchant_email,
             "access_token": access_token,
@@ -632,6 +645,112 @@ class DataStore:
         self.ai_activity_logs.append(entry)
         return entry
 
+    def record_recovery_job(
+        self,
+        admin_id: str,
+        payment_id: str,
+        task_type: str,
+        celery_task_id: Optional[str] = None,
+        status: str = "QUEUED",
+        scheduled_at: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Registers a new background/scheduled Celery recovery job in the store.
+        """
+        job_id = f"job_{uuid.uuid4().hex[:10]}"
+        now_str = datetime.now(timezone.utc).isoformat()
+        job = {
+            "id": job_id,
+            "admin_id": admin_id,
+            "payment_id": payment_id,
+            "task_type": task_type,
+            "celery_task_id": celery_task_id,
+            "status": status,
+            "scheduled_at": scheduled_at,
+            "started_at": now_str if status == "RUNNING" else None,
+            "completed_at": None,
+            "result": None,
+            "error": None,
+            "metadata": metadata or {},
+            "created_at": now_str,
+            "updated_at": now_str
+        }
+        self.recovery_jobs[job_id] = job
+        
+        # Also log to immutable audit logs
+        self.audit_logs.append({
+            "timestamp": now_str,
+            "event": "recovery_job_registered",
+            "admin_id": admin_id,
+            "payment_id": payment_id,
+            "job_id": job_id,
+            "celery_task_id": celery_task_id,
+            "task_type": task_type,
+            "status": status,
+            "scheduled_at": scheduled_at
+        })
+        return job
+
+    def update_recovery_job(
+        self,
+        job_id: str,
+        status: Optional[str] = None,
+        started_at: Optional[str] = None,
+        completed_at: Optional[str] = None,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Updates an existing recovery job status, result, or error.
+        """
+        job = self.recovery_jobs.get(job_id)
+        if not job:
+            return None
+        now_str = datetime.now(timezone.utc).isoformat()
+        if status:
+            job["status"] = status
+        if started_at:
+            job["started_at"] = started_at
+        if completed_at:
+            job["completed_at"] = completed_at
+        if result is not None:
+            job["result"] = result
+        if error is not None:
+            job["error"] = error
+        if metadata:
+            job["metadata"].update(metadata)
+        job["updated_at"] = now_str
+        
+        # Log to immutable audit log
+        self.audit_logs.append({
+            "timestamp": now_str,
+            "event": "recovery_job_updated",
+            "admin_id": job.get("admin_id"),
+            "payment_id": job.get("payment_id"),
+            "job_id": job_id,
+            "status": job["status"],
+            "error": error
+        })
+        return job
+
+    def get_recovery_job(self, job_id: str, admin_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        job = self.recovery_jobs.get(job_id)
+        if not job:
+            return None
+        if admin_id and job.get("admin_id") != admin_id:
+            return None
+        return job
+
+    def get_recovery_jobs(self, admin_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        jobs = [j for j in self.recovery_jobs.values() if j.get("admin_id") == admin_id]
+        return sorted(jobs, key=lambda x: x["created_at"], reverse=True)[:limit]
+
+    def get_recovery_jobs_for_payment(self, payment_id: str, admin_id: str) -> List[Dict[str, Any]]:
+        jobs = [j for j in self.recovery_jobs.values() if j.get("admin_id") == admin_id and j.get("payment_id") == payment_id]
+        return sorted(jobs, key=lambda x: x["created_at"], reverse=True)
+
     def get_ai_activities(self, admin_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Returns tenant-isolated AI activity and audit trail logs.
@@ -643,3 +762,4 @@ class DataStore:
 
 # Singleton store instance
 store = DataStore()
+

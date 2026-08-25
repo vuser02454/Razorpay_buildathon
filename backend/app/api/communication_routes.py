@@ -118,7 +118,7 @@ async def send_recovery_email_endpoint(
         update_link=update_link
     )
 
-    # Centralized Brevo SMTP dispatch
+    # Centralized Gmail SMTP dispatch
     result = EmailService.send_recovery_email(
         to_email=customer_email,
         customer_name=customer_name,
@@ -136,7 +136,7 @@ async def send_recovery_email_endpoint(
         customer_name=customer_name,
         customer_email=customer_email,
         subject=preview["subject"],
-        provider=result.get("provider", "brevo"),
+        provider=result.get("provider", "gmail"),
         provider_message_id=result.get("message_id"),
         status=result.get("status", "SENT"),
         error_message=diagnostic_err,
@@ -146,15 +146,15 @@ async def send_recovery_email_endpoint(
     if not result.get("success"):
         return EmailSendResponse(
             success=False,
-            message=result.get("error", "Unable to send the recovery email at this time."),
-            provider="brevo",
+            message=result.get("error", "We couldn't send your email right now. Please try again."),
+            provider="gmail",
             communication=comm
         )
 
     return EmailSendResponse(
         success=True,
         message=f"Transactional recovery email successfully dispatched to {customer_email}.",
-        provider=result.get("provider", "brevo"),
+        provider=result.get("provider", "gmail"),
         provider_message_id=result.get("message_id"),
         communication=comm
     )
@@ -162,20 +162,20 @@ async def send_recovery_email_endpoint(
 @router.post("/test", response_model=TestEmailResponse)
 async def test_email_endpoint(payload: TestEmailRequest):
     """
-    Diagnostic endpoint to test Brevo SMTP delivery.
+    Diagnostic endpoint to test Gmail SMTP delivery.
     """
     result = EmailService.send_test_email(payload.to_email)
     if not result.get("success"):
         return TestEmailResponse(
             success=False,
-            provider="brevo",
-            message=result.get("error", "Brevo SMTP delivery failed."),
+            provider="gmail",
+            message=result.get("error", "Gmail SMTP delivery failed. Please check credentials."),
             provider_message_id=None
         )
     return TestEmailResponse(
         success=True,
-        provider=result.get("provider", "brevo"),
-        message=f"Test email successfully dispatched to {payload.to_email} via Brevo SMTP.",
+        provider=result.get("provider", "gmail"),
+        message=f"Test email successfully dispatched to {payload.to_email} via Gmail SMTP.",
         provider_message_id=result.get("message_id")
     )
 

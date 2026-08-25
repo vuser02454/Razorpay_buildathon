@@ -38,6 +38,19 @@ class RazorpayProvider(PaymentProvider):
                 "status": "failed"
             }
 
+    def retry_charge(self, payment_id: str, amount: float, currency: str = "INR", token_id: Optional[str] = None) -> Dict[str, Any]:
+        res = self.charge_recurring(payment_id, amount, currency, token_id or payment_id)
+        return {
+            "success": res.get("success", False),
+            "status": "success" if res.get("success", False) else "failed",
+            "payment_id": res.get("payment_id"),
+            "amount": amount,
+            "currency": currency,
+            "error": res.get("error"),
+            "raw": res
+        }
+
+
     def verify_payment_status(self, payment_id: str) -> Dict[str, Any]:
         try:
             payment = self.client.payment.fetch(payment_id)

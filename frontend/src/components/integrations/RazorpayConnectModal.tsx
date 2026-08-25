@@ -12,11 +12,16 @@ import {
   Loader2,
   ExternalLink,
   Cpu,
-  Unlink,
-  Check
+  Key,
+  Check,
+  Eye,
+  EyeOff,
+  CreditCard
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { api } from '../../services/api';
 import { RazorpayConnectionStatus, RazorpayTestConnectionResponse } from '../../types';
+import { RazorpayGatewayModal } from './RazorpayGatewayModal';
 
 interface RazorpayConnectModalProps {
   isOpen: boolean;
@@ -25,16 +30,93 @@ interface RazorpayConnectModalProps {
   initialEmail?: string;
 }
 
+// Global helper to trigger official Razorpay Standard Checkout SDK
+export const launchRazorpayCheckout = (options: {
+  keyId?: string;
+  amount?: number; // In INR
+  currency?: string;
+  name?: string;
+  description?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  onSuccess?: (response: any) => void;
+  onDismiss?: () => void;
+}) => {
+  const openModal = () => {
+    if (typeof window === 'undefined') return;
+    const rzpClass = (window as any).Razorpay;
+    if (!rzpClass) {
+      alert('Razorpay Checkout SDK is loading. Please try again in 2 seconds.');
+      return;
+    }
+
+    const rzpOptions = {
+      key: options.keyId || 'rzp_test_mock_recoverai',
+      amount: Math.round((options.amount || 2500) * 100), // amount in paise
+      currency: options.currency || 'INR',
+      name: options.name || 'RecoverAI — Payment Recovery',
+      description: options.description || 'Verified Payment Recovery Sandbox Transaction',
+      image: '/favicon.svg',
+      handler: function (response: any) {
+        if (options.onSuccess) {
+          options.onSuccess(response);
+        }
+      },
+      prefill: {
+        name: options.customerName || 'Merchant Admin',
+        email: options.customerEmail || 'merchant@company.com',
+        contact: options.customerPhone || '+919876543210',
+      },
+      notes: {
+        platform: 'RecoverAI Track 3',
+        source: 'Recovery Gateway Live Test',
+      },
+      theme: {
+        color: '#84cc16', // RecoverAI Lime Theme
+      },
+      modal: {
+        ondismiss: function () {
+          if (options.onDismiss) options.onDismiss();
+        },
+      },
+    };
+
+    const rzp = new rzpClass(rzpOptions);
+    rzp.open();
+  };
+
+  // If script not loaded yet, inject and open
+  if (typeof window !== 'undefined' && !(window as any).Razorpay) {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => openModal();
+    document.body.appendChild(script);
+  } else {
+    openModal();
+  }
+};
+
 export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
   initialEmail = '',
 }) => {
-  // Wizard Steps: 1 = Verify Email, 2 = Authorize Razorpay, 3 = Connection Complete
+  // Method selection: 'api_keys' or 'email_otp'
+  const [connectMethod, setConnectMethod] = useState<'api_keys' | 'email_otp'>('api_keys');
+
+  // Wizard Steps: 1 = Input Credentials/Email, 2 = Authorize, 3 = Complete
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  
-  // Step 1: Email & OTP states
+
+  // Method 1: API Keys states
+  const [keyId, setKeyId] = useState('');
+  const [keySecret, setKeySecret] = useState('');
+  const [showKeySecret, setShowKeySecret] = useState(false);
+  const [savingKeys, setSavingKeys] = useState(false);
+
+  // Method 2: Email & OTP states
   const [email, setEmail] = useState(initialEmail);
   const [maskedEmail, setMaskedEmail] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -42,17 +124,19 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
   const [sendingCode, setSendingCode] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
 
-  // Step 2: Authorization states
+  // Authorization states
   const [authorizing, setAuthorizing] = useState(false);
 
-  // Step 3: Connection Complete states
+  // Connection Complete states
   const [connection, setConnection] = useState<RazorpayConnectionStatus | null>(null);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<RazorpayTestConnectionResponse | null>(null);
+  const [checkoutOpened, setCheckoutOpened] = useState(false);
+  const [checkoutSuccessMsg, setCheckoutSuccessMsg] = useState<string | null>(null);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
 
-  // Friendly error message state (Zero technical SMTP/traceback leakage)
+  // Error message state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -75,7 +159,40 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Step 1: Request Verification Code
+  // Handle direct API Keys submit
+  const handleConnectWithApiKeys = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!keyId.trim()) {
+      setErrorMsg('Please enter your Razorpay Key ID (e.g. rzp_test_... or rzp_live_...)');
+      return;
+    }
+
+    setErrorMsg(null);
+    setSavingKeys(true);
+    try {
+      const res = await api.authorizeRazorpay(
+        email || 'admin@company.com',
+        keyId.slice(0, 14),
+        'Razorpay Gateway',
+        keyId.trim(),
+        keySecret.trim()
+      );
+      if (res.success && res.connection) {
+        setConnection(res.connection);
+        setStep(3);
+        onSuccess(res.connection);
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+      } else {
+        setErrorMsg(res.message || 'Unable to connect with provided Razorpay API keys.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to authenticate Razorpay API keys. Please verify your credentials.');
+    } finally {
+      setSavingKeys(false);
+    }
+  };
+
+  // Step 1: Request Verification Code (Email OTP method)
   const handleSendCode = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!email || !email.includes('@')) {
@@ -149,14 +266,10 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
     try {
       const res = await api.verifyRazorpayOTP(email, fullOtp);
       if (res.success && res.verified) {
-        // Proceed to Step 2: Authorize Razorpay
         setStep(2);
         setErrorMsg(null);
       } else {
         setErrorMsg(res.message || "That code isn't correct. Please check your email and try again.");
-        if (res.remaining_attempts !== undefined) {
-          setRemainingAttempts(res.remaining_attempts);
-        }
       }
     } catch (err: any) {
       setErrorMsg('Invalid or expired verification code. Please try again.');
@@ -175,6 +288,7 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
         setConnection(res.connection);
         setStep(3);
         onSuccess(res.connection);
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       } else {
         setErrorMsg('Razorpay authorization was not completed. You can try again.');
       }
@@ -201,6 +315,11 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
     } finally {
       setTestingConnection(false);
     }
+  };
+
+  // Open the Razorpay Gateway Modal
+  const handleOpenLiveCheckout = () => {
+    setShowGatewayModal(true);
   };
 
   // Format countdown string "00:45"
@@ -231,15 +350,15 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs font-mono font-bold tracking-wider uppercase">
             <span className={step === 1 ? 'text-lime-300' : step > 1 ? 'text-emerald-400' : 'text-slate-500'}>
-              1. Verify Email {step > 1 && '✓'}
+              1. Credentials {step > 1 && '✓'}
             </span>
             <span className="text-slate-600">───</span>
             <span className={step === 2 ? 'text-lime-300' : step > 2 ? 'text-emerald-400' : 'text-slate-500'}>
-              2. Authorize Razorpay {step > 2 && '✓'}
+              2. Permissions {step > 2 && '✓'}
             </span>
             <span className="text-slate-600">───</span>
             <span className={step === 3 ? 'text-lime-300 font-bold' : 'text-slate-500'}>
-              3. Connection Complete {step === 3 && '✓'}
+              3. Live Gateway {step === 3 && '✓'}
             </span>
           </div>
 
@@ -251,7 +370,7 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
           </div>
         </div>
 
-        {/* Error Banner (Clean user-facing error message) */}
+        {/* Error Banner */}
         {errorMsg && (
           <div className="p-3.5 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-medium flex items-start gap-2 animate-fade-up">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -259,156 +378,254 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
           </div>
         )}
 
+        {/* Checkout Success Banner */}
+        {checkoutSuccessMsg && (
+          <div className="p-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-bold flex items-start gap-2 animate-fade-up">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="flex-1">{checkoutSuccessMsg}</div>
+          </div>
+        )}
+
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* STEP 1: VERIFY EMAIL (OTP REQUEST & VERIFY)                         */}
+        {/* STEP 1: CREDENTIALS / EMAIL                                         */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {step === 1 && (
-          <div className="space-y-6 animate-fade-up">
-            {!otpSent ? (
-              /* Step 1A: Enter Merchant Email */
-              <div className="space-y-5">
+          <div className="space-y-5 animate-fade-up">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[11px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                <span>Razorpay Gateway Integration</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-white font-display uppercase tracking-tight">
+                Connect Razorpay Gateway
+              </h2>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Connect your Razorpay account to listen to real-time subscription declines and execute automated smart retries.
+              </p>
+            </div>
+
+            {/* Connection Method Selector Tabs */}
+            <div className="flex rounded-2xl bg-slate-950 p-1 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => { setConnectMethod('api_keys'); setErrorMsg(null); }}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                  connectMethod === 'api_keys'
+                    ? 'bg-lime-300 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Key className="w-3.5 h-3.5" />
+                <span>Razorpay API Keys</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setConnectMethod('email_otp'); setErrorMsg(null); }}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                  connectMethod === 'email_otp'
+                    ? 'bg-lime-300 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Email OTP Verification</span>
+              </button>
+            </div>
+
+            {/* TAB 1: API KEYS INPUT */}
+            {connectMethod === 'api_keys' && (
+              <form onSubmit={handleConnectWithApiKeys} className="space-y-4 pt-1">
                 <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[11px] font-bold">
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Secure Integration Verification</span>
+                  <label className="block text-xs font-bold text-slate-200">
+                    Razorpay Key ID
+                  </label>
+                  <div className="relative">
+                    <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="rzp_test_... or rzp_live_..."
+                      value={keyId}
+                      onChange={(e) => setKeyId(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-lime-300 transition"
+                      required
+                    />
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white font-display uppercase tracking-tight">
-                    Connect Razorpay Gateway
-                  </h2>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    RecoverAI verifies merchant email ownership with a secure 6-digit verification code before linking your payment recovery workspace.
+                  <p className="text-[10px] text-slate-400">
+                    Found in your Razorpay Dashboard &gt; Settings &gt; API Keys.
                   </p>
                 </div>
 
-                <form onSubmit={handleSendCode} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-200">
-                      Razorpay Merchant Email
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="email"
-                        placeholder="merchant@company.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-lime-300 transition"
-                        required
-                      />
-                    </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-200">
+                    Razorpay Key Secret (Optional)
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type={showKeySecret ? 'text' : 'password'}
+                      placeholder="Enter Key Secret"
+                      value={keySecret}
+                      onChange={(e) => setKeySecret(e.target.value)}
+                      className="w-full pl-10 pr-10 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-lime-300 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKeySecret(!showKeySecret)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showKeySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
+                </div>
 
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-200">
+                    Merchant Email Reference
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="email"
+                      placeholder="merchant@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-lime-300 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row gap-3">
                   <button
                     type="submit"
-                    disabled={sendingCode || !email}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    disabled={savingKeys || !keyId}
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    {sendingCode ? (
+                    {savingKeys ? (
                       <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
                     ) : (
                       <>
-                        <span>Send Verification Code</span>
+                        <span>Connect & Verify Gateway</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
                   </button>
-                </form>
 
-                <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2.5">
-                  <Lock className="w-4 h-4 text-lime-400 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Fintech Security Standard:</strong> RecoverAI never stores raw credentials. The code expires in 5 minutes and is dispatched directly via transactional mail.
-                  </span>
-                </div>
-              </div>
-            ) : (
-              /* Step 1B: Enter 6-Digit OTP */
-              <div className="space-y-5">
-                <div className="space-y-1.5 text-center">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[11px] font-bold">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Verification Code Sent</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white font-display uppercase tracking-tight">
-                    Verify your email
-                  </h2>
-                  <p className="text-xs text-slate-300 max-w-sm mx-auto">
-                    Enter the 6-digit verification code sent to your registered email address.
-                  </p>
-                  <div className="pt-1">
-                    <span className="font-mono text-xs px-3 py-1 rounded-full bg-slate-800 text-lime-300 border border-slate-700">
-                      {maskedEmail}
-                    </span>
-                  </div>
-                </div>
-
-                {/* 6 Individual Digit Inputs */}
-                <div className="flex justify-center gap-2 sm:gap-3 py-2">
-                  {otpValues.map((digit, idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => { inputRefs.current[idx] = el; }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      onPaste={handleOtpPaste}
-                      className="w-11 h-13 sm:w-13 sm:h-15 text-center text-xl sm:text-2xl font-mono font-black rounded-2xl bg-slate-950 border border-slate-700 text-lime-300 focus:outline-none focus:border-lime-300 focus:ring-2 focus:ring-lime-300/30 transition shadow-inner"
-                    />
-                  ))}
-                </div>
-
-                {/* Verification CTA Button */}
-                <button
-                  type="button"
-                  onClick={handleVerifyOtp}
-                  disabled={verifyingOtp || otpValues.join('').length !== 6}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {verifyingOtp ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                  ) : (
-                    <>
-                      <span>Verify & Continue</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-
-                {/* Resend Code & Timer */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 text-xs text-slate-400 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => handleSendCode()}
-                    disabled={cooldown > 0 || sendingCode}
-                    className="text-slate-300 hover:text-white font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={handleOpenLiveCheckout}
+                    className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Didn't receive the code? <span className="underline text-lime-300">Resend code</span>
+                    <CreditCard className="w-4 h-4 text-lime-400" />
+                    <span>Open Checkout Popup</span>
                   </button>
+                </div>
+              </form>
+            )}
 
-                  {cooldown > 0 ? (
-                    <span className="font-mono text-[11px] text-slate-400">
-                      Resend available in <strong className="text-white">{formatCooldown(cooldown)}</strong>
-                    </span>
-                  ) : (
+            {/* TAB 2: EMAIL OTP VERIFICATION */}
+            {connectMethod === 'email_otp' && (
+              <div className="space-y-4 pt-1">
+                {!otpSent ? (
+                  <form onSubmit={handleSendCode} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-200">
+                        Razorpay Merchant Email
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          type="email"
+                          placeholder="merchant@company.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-lime-300 transition"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={sendingCode || !email}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {sendingCode ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      ) : (
+                        <>
+                          <span>Send 6-Digit Code via Gmail SMTP</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-center space-y-1">
+                      <span className="font-mono text-xs px-3 py-1 rounded-full bg-slate-800 text-lime-300 border border-slate-700">
+                        Code sent to {maskedEmail}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-center gap-2 py-2">
+                      {otpValues.map((digit, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => { inputRefs.current[idx] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleOtpChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                          onPaste={handleOtpPaste}
+                          className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl font-mono font-black rounded-2xl bg-slate-950 border border-slate-700 text-lime-300 focus:outline-none focus:border-lime-300 transition"
+                        />
+                      ))}
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setOtpSent(false)}
-                      className="text-[11px] text-slate-500 hover:text-slate-300 transition"
+                      onClick={handleVerifyOtp}
+                      disabled={verifyingOtp || otpValues.join('').length !== 6}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                      Change email
+                      {verifyingOtp ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      ) : (
+                        <>
+                          <span>Verify & Proceed</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
                     </button>
-                  )}
-                </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSendCode()}
+                        disabled={cooldown > 0 || sendingCode}
+                        className="text-slate-300 hover:text-white font-semibold transition"
+                      >
+                        Resend code {cooldown > 0 && `(${formatCooldown(cooldown)})`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOtpSent(false)}
+                        className="text-slate-500 hover:text-slate-300"
+                      >
+                        Change email
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* STEP 2: AUTHORIZE RAZORPAY GATEWAY                                  */}
+        {/* STEP 2: AUTHORIZE RAZORPAY GATEWAY (OTP FLOW)                       */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {step === 2 && (
           <div className="space-y-6 animate-fade-up">
@@ -418,46 +635,21 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
                 <span>Email verified</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-white font-display uppercase tracking-tight">
-                Connect your Razorpay account
+                Authorize Gateway Scopes
               </h2>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Your email has been verified. Continue to authorize RecoverAI to access the Razorpay data required for payment recovery.
+                RecoverAI requests permission to monitor payment failures and execute deterministic recovery retries.
               </p>
             </div>
 
-            {/* Scope / Permissions Box */}
-            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-              <div className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
-                Requested Scopes & Permissions
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5 text-xs text-slate-300">
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div><strong className="text-white">Payment monitoring:</strong> Ingest <code>payment.failed</code> and <code>subscription.halted</code> webhook events.</div>
               </div>
-
-              <div className="space-y-2.5 text-xs text-slate-300">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Check className="w-3 h-3" />
-                  </div>
-                  <div>
-                    <strong className="text-white">Payment monitoring:</strong> Listen to real-time <code>payment.failed</code> and <code>subscription.halted</code> webhook events.
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Check className="w-3 h-3" />
-                  </div>
-                  <div>
-                    <strong className="text-white">Payment status:</strong> Query issuer clearance, bank decline codes, and tokenized payment status references.
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Check className="w-3 h-3" />
-                  </div>
-                  <div>
-                    <strong className="text-white">Payment recovery data:</strong> Dispatch policy-approved smart retries and synchronized customer communication links.
-                  </div>
-                </div>
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div><strong className="text-white">Payment recovery data:</strong> Issue tokenized smart retries and Gmail SMTP 1-click recovery links.</div>
               </div>
             </div>
 
@@ -470,7 +662,7 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
                 <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
               ) : (
                 <>
-                  <span>Continue to Razorpay</span>
+                  <span>Complete Gateway Connection</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -479,7 +671,7 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* STEP 3: CONNECTION COMPLETE & STATUS                                */}
+        {/* STEP 3: CONNECTION COMPLETE & LIVE CHECKOUT TEST                    */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {step === 3 && (
           <div className="space-y-6 animate-fade-up">
@@ -488,7 +680,7 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                   <span className="text-sm font-bold text-emerald-400 font-mono">
-                    ✓ Razorpay Connected
+                    ✓ Razorpay Connected & Active
                   </span>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold uppercase">
@@ -499,12 +691,12 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs border-t border-slate-800">
                 <div>
                   <span className="text-slate-500 font-mono text-[10px] block uppercase">Merchant</span>
-                  <strong className="text-white font-mono">{connection?.merchant_email || email}</strong>
+                  <strong className="text-white font-mono">{connection?.merchant_email || email || 'Verified Merchant'}</strong>
                 </div>
 
                 <div>
-                  <span className="text-slate-500 font-mono text-[10px] block uppercase">Status</span>
-                  <strong className="text-emerald-400 font-mono">CONNECTED</strong>
+                  <span className="text-slate-500 font-mono text-[10px] block uppercase">Key ID</span>
+                  <strong className="text-lime-300 font-mono">{keyId || connection?.key_id || 'rzp_test_active'}</strong>
                 </div>
 
                 <div>
@@ -515,21 +707,6 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
                 <div>
                   <span className="text-slate-500 font-mono text-[10px] block uppercase">Last verified</span>
                   <strong className="text-slate-300">Just now</strong>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800">
-                <span className="text-slate-500 font-mono text-[10px] block uppercase mb-1.5">Permissions</span>
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
-                    Payment monitoring
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
-                    Payment status
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
-                    Payment recovery data
-                  </span>
                 </div>
               </div>
             </div>
@@ -547,28 +724,59 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
             )}
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="space-y-3">
+              {/* Prominent Button to Open Official Razorpay Checkout Modal */}
               <button
                 type="button"
-                onClick={handleTestConnection}
-                disabled={testingConnection}
-                className="flex-1 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                onClick={handleOpenLiveCheckout}
+                className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm transition shadow-xl flex items-center justify-center gap-2.5 cursor-pointer"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
-                <span>{testingConnection ? 'Testing Connection...' : 'Test Connection'}</span>
+                <CreditCard className="w-4 h-4 text-white" />
+                <span>Open Live Razorpay Checkout Modal (Test Gateway)</span>
+                <ExternalLink className="w-4 h-4" />
               </button>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-3 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>Return to Dashboard</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="flex-1 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
+                  <span>{testingConnection ? 'Testing...' : 'Ping Gateway API'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-3 rounded-2xl bg-lime-300 hover:bg-lime-200 text-slate-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Return to Dashboard</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         )}
+
+        {/* In-App Interactive Razorpay Gateway Modal */}
+        <RazorpayGatewayModal
+          isOpen={showGatewayModal}
+          onClose={() => setShowGatewayModal(false)}
+          amount={2500}
+          currency="INR"
+          merchantName="RecoverAI Payment Recovery Gateway"
+          description="Live Gateway Connection Test"
+          customerName={email.split('@')[0] || 'Merchant Admin'}
+          customerEmail={email || 'admin@company.com'}
+          keyId={keyId || connection?.key_id}
+          onSuccess={(details) => {
+            setShowGatewayModal(false);
+            setCheckoutSuccessMsg(`✓ Real-time Razorpay Payment Succeeded! (ID: ${details.razorpay_payment_id})`);
+            confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+          }}
+        />
       </div>
     </div>
   );

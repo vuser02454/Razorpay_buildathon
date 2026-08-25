@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   RefreshCw,
   Cpu,
-  ShieldCheck
+  ShieldCheck,
+  CreditCard
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -19,7 +20,10 @@ export const AIStatusPanel: React.FC = () => {
     groq: { name: 'Groq LPU', role: 'Real-Time AI Copilot Assistant', status: 'connected', model: 'llama3-70b-8192' },
     openrouter: { name: 'OpenRouter', role: 'Fallback & Multi-Model Reasoning', status: 'connected', model: 'llama-3.3-70b-instruct' },
     langgraph: { name: 'LangGraph Engine', role: 'Autonomous Workflow Orchestration', status: 'active', nodes_count: 7 },
-    brevo: { name: 'Brevo SMTP', role: 'Transactional Email Delivery', status: 'connected', port: 587 },
+    celery: { name: 'Celery Worker', role: 'Background & Scheduled Automation', status: 'active', broker: 'Redis' },
+    redis: { name: 'Redis Broker', role: 'Message Broker & Result Store', status: 'connected', url: 'redis://localhost:6379/0' },
+    gmail: { name: 'Gmail SMTP', role: 'Transactional Email Delivery', status: 'connected', port: 587 },
+    razorpay: { name: 'Razorpay Gateway', role: 'Payment Processing & Auto-Retries', status: 'connected', mode: 'sandbox' },
     supabase: { name: 'Supabase PostgreSQL', role: 'Source of Truth & Storage', status: 'connected', sync_mode: 'active' }
   });
 
@@ -42,12 +46,17 @@ export const AIStatusPanel: React.FC = () => {
   }, []);
 
   const getIcon = (key: string) => {
-    switch (key) {
+    switch (key.toLowerCase()) {
       case 'gemini': return Sparkles;
       case 'groq': return Zap;
       case 'openrouter': return Globe;
       case 'langgraph': return Layers;
+      case 'celery': return RefreshCw;
+      case 'redis': return Layers;
+      case 'gmail':
+      case 'smtp':
       case 'brevo': return Mail;
+      case 'razorpay': return CreditCard;
       case 'supabase': return Database;
       default: return Cpu;
     }

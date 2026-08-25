@@ -179,12 +179,20 @@ export const api = {
   async authorizeRazorpay(
     email: string,
     accountId?: string,
-    merchantName?: string
+    merchantName?: string,
+    keyId?: string,
+    keySecret?: string
   ): Promise<{ success: boolean; message: string; connection: RazorpayConnectionStatus }> {
     const res = await fetch(`${API_BASE}/integrations/razorpay/authorize`, {
       method: 'POST',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, account_id: accountId, merchant_name: merchantName }),
+      body: JSON.stringify({
+        email,
+        account_id: accountId,
+        merchant_name: merchantName,
+        key_id: keyId,
+        key_secret: keySecret
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

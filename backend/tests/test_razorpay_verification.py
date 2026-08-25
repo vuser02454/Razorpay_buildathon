@@ -158,7 +158,7 @@ def test_tenant_isolation_otp(fresh_store):
     assert success is False
     assert "Invalid or expired" in msg
 
-def test_brevo_verification_email_template():
+def test_gmail_verification_email_template():
     """
     Verifies that the merchant verification email template renders cleanly with OTP,
     expiry note, and zero infrastructure / error leaks.

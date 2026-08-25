@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import './index.css';
 
-// Authentication Pages (Mandatory First Screen)
+// Authentication Pages & Modals (Mandatory Supabase Auth Gate)
 import { LoginPage } from './components/auth/LoginPage';
 import { SignupPage } from './components/auth/SignupPage';
+import { CheckEmailPage } from './components/auth/CheckEmailPage';
+import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
+import { AuthCallback } from './components/auth/AuthCallback';
+import { AuthGuard } from './components/auth/AuthGuard';
 import { authStore, AdminProfile } from './services/authStore';
 
 // AI Assistant Conversational Interface (Grok + Gemini)
@@ -33,6 +38,8 @@ import { OnboardingModal } from './components/OnboardingModal';
 
 // Customer Payment Update Page (Accessible via 1-click email link)
 import { CustomerPaymentUpdatePage } from './components/customer/CustomerPaymentUpdatePage';
+
+type AuthViewMode = 'login' | 'signup' | 'check-email' | 'forgot-password' | 'reset-password' | 'callback';
 
 export function App() {
   // Global Dark Mode state
@@ -65,7 +72,30 @@ export function App() {
 
   // Authentication State
   const [admin, setAdmin] = useState<AdminProfile | null>(() => authStore.getAdmin());
-  const [authView, setAuthView] = useState<'login' | 'signup'>('login');
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+
+  // Determine initial auth view based on URL route / hash
+  const initialAuthView = (): AuthViewMode => {
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    const search = window.location.search;
+
+    if (
+      path === '/auth/callback' ||
+      path.startsWith('/auth/') ||
+      hash.includes('access_token=') ||
+      hash.includes('type=recovery') ||
+      search.includes('type=recovery') ||
+      hash.includes('error=') ||
+      search.includes('error=')
+    ) {
+      return 'callback';
+    }
+    return 'login';
+  };
+
+  const [authView, setAuthView] = useState<AuthViewMode>(initialAuthView);
+  const [pendingEmail, setPendingEmail] = useState<string>('');
 
   // AI Assistant Drawer State
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
@@ -75,6 +105,56 @@ export function App() {
   const [showSimulationModal, setShowSimulationModal] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── AUTHENTICATION INITIALIZATION & STATE SUBSCRIPTION ──────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initAuth() {
+      try {
+        const loadedAdmin = await authStore.initSession();
+        if (isMounted) {
+          if (loadedAdmin) {
+            setAdmin(loadedAdmin);
+          }
+        }
+      } catch (err) {
+        console.warn('[RecoverAI] Auth init error:', err);
+      } finally {
+        if (isMounted) {
+          setIsAuthLoading(false);
+        }
+      }
+    }
+
+    initAuth();
+
+    // Subscribe to Supabase Auth State Changes
+    const { data: { subscription } } = authStore.onAuthStateChange((event, session, updatedAdmin) => {
+      if (!isMounted) return;
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthView('reset-password');
+        setAdmin(null);
+      } else if (event === 'SIGNED_IN' && updatedAdmin) {
+        setAdmin(updatedAdmin);
+        setAuthView('login');
+      } else if (event === 'SIGNED_OUT') {
+        setAdmin(null);
+        setAuthView('login');
+        setIsAssistantOpen(false);
+      } else if (updatedAdmin) {
+        setAdmin(updatedAdmin);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ─── PUBLIC CUSTOMER PAYMENT UPDATE PAGE (FROM EMAIL 1-CLICK LINK) ────────
@@ -92,6 +172,7 @@ export function App() {
 
   const handleAuthSuccess = (loggedAdmin: AdminProfile) => {
     setAdmin(loggedAdmin);
+    setAuthView('login');
     setActiveSection('queue');
   };
 
@@ -120,126 +201,184 @@ export function App() {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ─── MANDATORY FIRST SCREEN: UNAUTHENTICATED LOGIN / SIGNUP ───────────────
-  // ═══════════════════════════════════════════════════════════════════════════
-  if (!admin) {
-    if (authView === 'signup') {
+  // Render Unauthenticated Flow
+  const renderAuthFlow = () => {
+    if (authView === 'callback') {
       return (
-        <SignupPage
-          onSuccess={handleAuthSuccess}
+        <AuthCallback
+          onAuthSuccess={handleAuthSuccess}
+          onPasswordRecovery={() => setAuthView('reset-password')}
           onGoToLogin={() => setAuthView('login')}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
         />
       );
     }
+
+    if (authView === 'check-email') {
+      return (
+        <CheckEmailPage
+          email={pendingEmail}
+          onGoToLogin={() => setAuthView('login')}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+        />
+      );
+    }
+
+    if (authView === 'forgot-password') {
+      return (
+        <ForgotPasswordPage
+          onGoToLogin={() => setAuthView('login')}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+        />
+      );
+    }
+
+    if (authView === 'reset-password') {
+      return (
+        <ResetPasswordPage
+          onSuccess={() => setAuthView('login')}
+          onGoToLogin={() => setAuthView('login')}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+        />
+      );
+    }
+
+    if (authView === 'signup') {
+      return (
+        <SignupPage
+          onSuccess={(email) => {
+            setPendingEmail(email);
+            setAuthView('check-email');
+          }}
+          onGoToLogin={() => setAuthView('login')}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+        />
+      );
+    }
+
     return (
       <LoginPage
         onSuccess={handleAuthSuccess}
         onGoToSignup={() => setAuthView('signup')}
+        onGoToForgotPassword={() => setAuthView('forgot-password')}
+        onGoToCheckEmail={(email) => {
+          setPendingEmail(email);
+          setAuthView('check-email');
+        }}
         isDarkMode={isDarkMode}
         onToggleDarkMode={handleToggleDarkMode}
       />
     );
-  }
+  };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ─── AUTHENTICATED WORKSPACE (DEMO ADMIN OR NEW ADMIN) ────────────────────
+  // ─── AUTHENTICATION GATE & PROTECTED WORKSPACE ────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className={`min-h-screen font-sans selection:bg-lime-200 transition-colors duration-300 ${
-      isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'
-    }`}>
-      {/* Floating Pill Navigation */}
-      <RecoverNavbar
-        activeSection={activeSection}
-        onNavigate={handleNavigate}
-        onLaunchEngine={() => setActiveSection('queue')}
-        onLogout={handleLogout}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={handleToggleDarkMode}
-      />
+    <AuthGuard
+      admin={admin}
+      isLoading={isAuthLoading}
+      fallback={renderAuthFlow()}
+      isDarkMode={isDarkMode}
+    >
+      <div className={`min-h-screen font-sans selection:bg-lime-200 transition-colors duration-300 ${
+        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'
+      }`}>
+        {/* Floating Pill Navigation */}
+        <RecoverNavbar
+          activeSection={activeSection}
+          onNavigate={handleNavigate}
+          onLaunchEngine={() => setActiveSection('queue')}
+          onLogout={handleLogout}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+        />
 
-      <main>
-        {activeSection === 'queue' ? (
-          <RecoveryControlCenter
-            key={refreshKey}
-            onOpenSimulation={() => setShowSimulationModal(true)}
-          />
-        ) : activeSection === 'dunning' ? (
-          <div className="pt-28 px-4 sm:px-8 max-w-6xl mx-auto pb-16">
-            <DunningCenterView key={refreshKey} />
-          </div>
-        ) : activeSection === 'analytics' ? (
-          <div className="pt-28 px-4 sm:px-8 max-w-6xl mx-auto pb-16 space-y-12">
-            <AnalyticsView key={`an-${refreshKey}`} />
-            <ExperimentsView key={`exp-${refreshKey}`} />
-            <ClosedLoopLearningView key={`cl-${refreshKey}`} />
-          </div>
-        ) : activeSection === 'settings' ? (
-          <div className="pt-28 px-4 sm:px-8 max-w-6xl mx-auto pb-16">
-            <SettingsView />
-          </div>
-        ) : (
-          /* RecoverAI Landing Story Sections */
-          <div>
-            <RecoverHero
-              onLaunchEngine={() => setActiveSection('queue')}
-              onExploreHowItWorks={() => {
-                const el = document.getElementById('how-it-works');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-              onTryDemo={() => setActiveSection('queue')}
+        <main>
+          {activeSection === 'queue' ? (
+            <RecoveryControlCenter
+              key={refreshKey}
+              onOpenSimulation={() => setShowSimulationModal(true)}
             />
-
-            <CoreStorySection />
-            <ThreeLayerSection onExploreLayer={() => setActiveSection('queue')} />
-            <PolicyGateSection />
-            <DunningTimelineSection />
-            <ClosedLoopSection />
-            <ProofOfValueSection />
-            <RazorpayIntegrationSection onOpenSandbox={() => setShowSimulationModal(true)} />
-
-            {/* Live Queue Preview at Bottom */}
-            <div className={`py-12 border-t transition-colors ${
-              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <RecoveryControlCenter
-                key={`preview-${refreshKey}`}
-                onOpenSimulation={() => setShowSimulationModal(true)}
-              />
+          ) : activeSection === 'dunning' ? (
+            <div className="pt-28 px-4 sm:px-8 max-w-6xl mx-auto pb-16">
+              <DunningCenterView key={refreshKey} />
             </div>
-          </div>
-        )}
-      </main>
+          ) : activeSection === 'analytics' ? (
+            <div className="pt-28 px-4 sm:px-8 max-w-6xl mx-auto pb-16 space-y-12">
+              <AnalyticsView key={`an-${refreshKey}`} />
+              <ExperimentsView key={`exp-${refreshKey}`} />
+              <ClosedLoopLearningView key={`cl-${refreshKey}`} />
+            </div>
+          ) : activeSection === 'settings' ? (
+            <div className="pt-28 px-4 sm:px-8 max-w-6xl mx-auto pb-16">
+              <SettingsView />
+            </div>
+          ) : (
+            /* RecoverAI Landing Story Sections */
+            <div>
+              <RecoverHero
+                onLaunchEngine={() => setActiveSection('queue')}
+                onExploreHowItWorks={() => {
+                  const el = document.getElementById('how-it-works');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                onTryDemo={() => setActiveSection('queue')}
+              />
 
-      {/* Persistent Floating AI Assistant Button (Bottom-Right) */}
-      <AIAssistantButton
-        isOpen={isAssistantOpen}
-        onClick={() => setIsAssistantOpen(true)}
-      />
+              <CoreStorySection />
+              <ThreeLayerSection onExploreLayer={() => setActiveSection('queue')} />
+              <PolicyGateSection />
+              <DunningTimelineSection />
+              <ClosedLoopSection />
+              <ProofOfValueSection />
+              <RazorpayIntegrationSection onOpenSandbox={() => setShowSimulationModal(true)} />
 
-      {/* AI Assistant Chat Panel / Drawer */}
-      <AIAssistantDrawer
-        isOpen={isAssistantOpen}
-        onClose={() => setIsAssistantOpen(false)}
-      />
+              {/* Live Queue Preview at Bottom */}
+              <div className={`py-12 border-t transition-colors ${
+                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <RecoveryControlCenter
+                  key={`preview-${refreshKey}`}
+                  onOpenSimulation={() => setShowSimulationModal(true)}
+                />
+              </div>
+            </div>
+          )}
+        </main>
 
-      {/* Simulation & Onboarding Modals */}
-      <SimulationModal
-        isOpen={showSimulationModal}
-        onClose={() => setShowSimulationModal(false)}
-        onSuccess={() => {
-          setActiveSection('queue');
-          setRefreshKey((k) => k + 1);
-        }}
-      />
-      <OnboardingModal
-        isOpen={showOnboardingModal}
-        onClose={() => setShowOnboardingModal(false)}
-      />
-    </div>
+        {/* Persistent Floating AI Assistant Button (Bottom-Right) */}
+        <AIAssistantButton
+          isOpen={isAssistantOpen}
+          onClick={() => setIsAssistantOpen(true)}
+        />
+
+        {/* AI Assistant Chat Panel / Drawer */}
+        <AIAssistantDrawer
+          isOpen={isAssistantOpen}
+          onClose={() => setIsAssistantOpen(false)}
+        />
+
+        {/* Simulation & Onboarding Modals */}
+        <SimulationModal
+          isOpen={showSimulationModal}
+          onClose={() => setShowSimulationModal(false)}
+          onSuccess={() => {
+            setActiveSection('queue');
+            setRefreshKey((k) => k + 1);
+          }}
+        />
+        <OnboardingModal
+          isOpen={showOnboardingModal}
+          onClose={() => setShowOnboardingModal(false)}
+        />
+      </div>
+    </AuthGuard>
   );
 }
 

@@ -7,6 +7,12 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #ffffff;
@@ -17,7 +23,8 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-overflow-scrolling: touch;
+  transition: background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -242,16 +249,39 @@ p, span, a, input, textarea, select, button, .font-sans {
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px) scale(0.995);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
 .animate-fade-up {
-  animation: fadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity;
+}
+
+/* Fluid hardware acceleration for cards and modals */
+.gpu-smooth {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
 }
 
 /* Clean Custom Scrollbars */
@@ -272,4 +302,5 @@ p, span, a, input, textarea, select, button, .font-sans {
 .dark ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
 }
+
 

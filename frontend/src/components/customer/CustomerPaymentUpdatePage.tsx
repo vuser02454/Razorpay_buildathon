@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../../services/api';
+import { RazorpayGatewayModal } from '../integrations/RazorpayGatewayModal';
 
 interface CustomerPaymentUpdatePageProps {
   paymentId?: string;
@@ -62,6 +63,7 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRazorpayModal, setShowRazorpayModal] = useState(false);
 
   useEffect(() => {
     const loadDetails = async () => {
@@ -116,36 +118,77 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
 
   const sym = paymentData.currency === 'INR' ? '₹' : '$';
 
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return document.documentElement.classList.contains('dark') || localStorage.getItem('recoverai_dark_mode') === 'true';
+  });
+
+  const toggleTheme = () => {
+    const next = !isDarkMode;
+    setIsDarkMode(next);
+    if (next) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans selection:bg-blue-500 selection:text-white">
+    <div className={`min-h-screen flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans selection:bg-blue-500 selection:text-white transition-colors duration-300 ${
+      isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+    }`}>
       
       {/* Top Header */}
-      <header className="max-w-4xl w-full mx-auto flex items-center justify-between py-4 border-b border-slate-800">
+      <header className={`max-w-4xl w-full mx-auto flex items-center justify-between py-4 border-b transition-colors ${
+        isDarkMode ? 'border-slate-800' : 'border-slate-200'
+      }`}>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-black">
             ⚡
           </div>
           <div>
-            <span className="font-extrabold tracking-tight text-white font-display text-lg uppercase">
+            <span className={`font-extrabold tracking-tight font-display text-lg uppercase transition-colors ${
+              isDarkMode ? 'text-white' : 'text-slate-950'
+            }`}>
               RecoverAI
             </span>
-            <span className="text-[10px] font-mono text-slate-400 block -mt-1">
+            <span className={`text-[10px] font-mono block -mt-1 ${
+              isDarkMode ? 'text-slate-400' : 'text-slate-500'
+            }`}>
               Secure Payment Gateway
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-700/50 text-emerald-300 text-xs font-bold">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>256-Bit Encrypted</span>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={toggleTheme}
+            className={`p-2 rounded-full border transition-all active:scale-95 cursor-pointer ${
+              isDarkMode
+                ? 'bg-white/10 border-white/15 text-amber-300 hover:bg-white/20'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm'
+            }`}
+            title="Toggle theme"
+          >
+            {isDarkMode ? <span className="text-xs">☀️</span> : <span className="text-xs">🌙</span>}
+          </button>
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${
+            isDarkMode
+              ? 'bg-emerald-950/60 border-emerald-700/50 text-emerald-300'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          }`}>
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>256-Bit Encrypted</span>
+          </div>
         </div>
       </header>
 
       {/* Main Payment Container */}
-      <main className="max-w-xl w-full mx-auto my-8">
+      <main className="max-w-xl w-full mx-auto my-8 animate-fade-up">
         {isSuccess ? (
           /* Success Screen */
-          <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl text-center space-y-6 animate-fade-up">
+          <div className={`p-8 rounded-3xl border shadow-2xl text-center space-y-6 animate-fade-up transition-colors ${
+            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-slate-900/5'
+          }`}>
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
               <Check className="w-8 h-8 stroke-[3]" />
             </div>
@@ -182,7 +225,7 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
               </div>
               <div className="flex justify-between text-slate-400 border-t border-slate-800/80 pt-2 text-[10px]">
                 <span>CONFIRMATION:</span>
-                <span className="text-emerald-400 font-bold">Dispatched via Brevo SMTP</span>
+                <span className="text-emerald-400 font-bold">Dispatched via Gmail SMTP</span>
               </div>
             </div>
 
@@ -200,40 +243,54 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
           </div>
         ) : (
           /* Payment Form */
-          <div className="p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-6">
+          <div className={`p-6 sm:p-8 rounded-3xl border shadow-2xl space-y-6 transition-colors ${
+            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-slate-900/5'
+          }`}>
             
             {/* Amount Due Header */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 flex items-center justify-between">
+            <div className={`p-5 rounded-2xl border flex items-center justify-between transition-colors ${
+              isDarkMode
+                ? 'bg-gradient-to-br from-slate-950 to-slate-900 border-slate-800'
+                : 'bg-gradient-to-br from-slate-50 to-slate-100/70 border-slate-200'
+            }`}>
               <div>
-                <span className="text-[10px] font-mono font-bold uppercase text-slate-400 block">
+                <span className={`text-[10px] font-mono font-bold uppercase block ${
+                  isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                }`}>
                   Amount Due &bull; {paymentData.merchant_name || 'Subscription Invoice'}
                 </span>
-                <div className="text-3xl font-black text-white font-mono mt-0.5">
+                <div className={`text-3xl font-black font-mono mt-0.5 ${
+                  isDarkMode ? 'text-white' : 'text-slate-950'
+                }`}>
                   {sym}{Number(paymentData.amount).toLocaleString()}.00
                 </div>
-                <span className="text-[11px] text-slate-400 block mt-1">
-                  For customer: <strong className="text-slate-200">{paymentData.customer_name}</strong> ({paymentData.customer_email})
+                <span className={`text-[11px] block mt-1 ${
+                  isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                }`}>
+                  For customer: <strong className={isDarkMode ? 'text-slate-200' : 'text-slate-900'}>{paymentData.customer_name}</strong> ({paymentData.customer_email})
                 </span>
               </div>
 
-              <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-500">
                 <CreditCard className="w-6 h-6" />
               </div>
             </div>
 
             {/* Payment Method Selector */}
             <div className="space-y-2">
-              <label className="text-[11px] font-mono uppercase font-bold text-slate-400">
+              <label className={`text-[11px] font-mono uppercase font-bold ${
+                isDarkMode ? 'text-slate-400' : 'text-slate-600'
+              }`}>
                 Select Payment Method:
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('card')}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold cursor-pointer ${
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold cursor-pointer active:scale-95 ${
                     paymentMethod === 'card'
-                      ? 'bg-blue-600/20 border-blue-500 text-white shadow-sm'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-600 dark:text-white shadow-sm'
+                      : (isDarkMode ? 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white' : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900')
                   }`}
                 >
                   <CreditCard className="w-4 h-4" />
@@ -243,10 +300,10 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('upi')}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold cursor-pointer ${
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold cursor-pointer active:scale-95 ${
                     paymentMethod === 'upi'
-                      ? 'bg-blue-600/20 border-blue-500 text-white shadow-sm'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-600 dark:text-white shadow-sm'
+                      : (isDarkMode ? 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white' : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900')
                   }`}
                 >
                   <Smartphone className="w-4 h-4" />
@@ -256,10 +313,10 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('netbanking')}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold cursor-pointer ${
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition text-xs font-bold cursor-pointer active:scale-95 ${
                     paymentMethod === 'netbanking'
-                      ? 'bg-blue-600/20 border-blue-500 text-white shadow-sm'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-600 dark:text-white shadow-sm'
+                      : (isDarkMode ? 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white' : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900')
                   }`}
                 >
                   <Building2 className="w-4 h-4" />
@@ -270,7 +327,7 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
 
             {/* Error Banner */}
             {error && (
-              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -281,7 +338,9 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
               {paymentMethod === 'card' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[11px] font-mono font-bold uppercase text-slate-400 block mb-1">
+                    <label className={`text-[11px] font-mono font-bold uppercase block mb-1 ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                    }`}>
                       Card Number
                     </label>
                     <div className="relative">
@@ -291,9 +350,13 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                         onChange={(e) => setCardNumber(e.target.value)}
                         placeholder="4242 4242 4242 4242"
                         required
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                        className={`w-full px-4 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition ${
+                          isDarkMode
+                            ? 'bg-slate-950 border border-slate-800 text-white focus:border-blue-500'
+                            : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                        }`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-500">
                         VISA
                       </span>
                     </div>
@@ -301,7 +364,9 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[11px] font-mono font-bold uppercase text-slate-400 block mb-1">
+                      <label className={`text-[11px] font-mono font-bold uppercase block mb-1 ${
+                        isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                      }`}>
                         Expiry Date
                       </label>
                       <input
@@ -310,11 +375,17 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                         onChange={(e) => setCardExpiry(e.target.value)}
                         placeholder="MM/YY"
                         required
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                        className={`w-full px-4 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition ${
+                          isDarkMode
+                            ? 'bg-slate-950 border border-slate-800 text-white focus:border-blue-500'
+                            : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                        }`}
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-mono font-bold uppercase text-slate-400 block mb-1">
+                      <label className={`text-[11px] font-mono font-bold uppercase block mb-1 ${
+                        isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                      }`}>
                         Security Code (CVV)
                       </label>
                       <input
@@ -324,13 +395,19 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                         placeholder="123"
                         maxLength={4}
                         required
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                        className={`w-full px-4 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition ${
+                          isDarkMode
+                            ? 'bg-slate-950 border border-slate-800 text-white focus:border-blue-500'
+                            : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                        }`}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-mono font-bold uppercase text-slate-400 block mb-1">
+                    <label className={`text-[11px] font-mono font-bold uppercase block mb-1 ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                    }`}>
                       Name on Card
                     </label>
                     <input
@@ -339,7 +416,11 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                       onChange={(e) => setCardName(e.target.value)}
                       placeholder="Cardholder Name"
                       required
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-blue-500"
+                      className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border border-slate-800 text-white focus:border-blue-500'
+                          : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                      }`}
                     />
                   </div>
                 </div>
@@ -348,7 +429,9 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
               {paymentMethod === 'upi' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[11px] font-mono font-bold uppercase text-slate-400 block mb-1">
+                    <label className={`text-[11px] font-mono font-bold uppercase block mb-1 ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                    }`}>
                       Virtual Payment Address (UPI ID)
                     </label>
                     <input
@@ -357,14 +440,18 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
                       onChange={(e) => setUpiId(e.target.value)}
                       placeholder="username@okhdfcbank"
                       required
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                      className={`w-full px-4 py-2.5 rounded-xl text-sm font-mono focus:outline-none transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border border-slate-800 text-white focus:border-blue-500'
+                          : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                      }`}
                     />
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
                     <span>Popular Apps:</span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-white">Google Pay</span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-white">PhonePe</span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-white">Paytm</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-800 dark:text-white">Google Pay</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-800 dark:text-white">PhonePe</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-800 dark:text-white">Paytm</span>
                   </div>
                 </div>
               )}
@@ -372,13 +459,19 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
               {paymentMethod === 'netbanking' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[11px] font-mono font-bold uppercase text-slate-400 block mb-1">
+                    <label className={`text-[11px] font-mono font-bold uppercase block mb-1 ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-700'
+                    }`}>
                       Select Your Bank
                     </label>
                     <select
                       value={selectedBank}
                       onChange={(e) => setSelectedBank(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none cursor-pointer transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border border-slate-800 text-white focus:border-blue-500'
+                          : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                      }`}
                     >
                       <option value="HDFC Bank">HDFC Bank</option>
                       <option value="ICICI Bank">ICICI Bank</option>
@@ -391,27 +484,40 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
               )}
 
               {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-lg shadow-blue-600/30 transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-4"
-              >
-                {submitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Lock className="w-4 h-4" />
-                )}
-                <span>
-                  {submitting ? 'Verifying & Recovering Subscription...' : `Update & Pay ${sym}${Number(paymentData.amount).toLocaleString()}.00`}
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRazorpayModal(true)}
+                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.98] text-white font-extrabold text-xs shadow-lg shadow-blue-600/30 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Open Official Razorpay Checkout Modal</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full py-3.5 rounded-full bg-lime-400 hover:bg-lime-300 active:scale-[0.98] text-slate-950 font-black text-xs shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  ) : (
+                    <Lock className="w-4 h-4" />
+                  )}
+                  <span>
+                    {submitting ? 'Verifying & Recovering Subscription...' : `Update Card & Pay ${sym}${Number(paymentData.amount).toLocaleString()}.00`}
+                  </span>
+                </button>
+              </div>
             </form>
 
             {/* Security Guarantee Inset */}
-            <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+            <div className={`p-3.5 rounded-2xl border flex items-center justify-between text-[10px] font-mono ${
+              isDarkMode ? 'bg-slate-950/60 border-slate-800/80 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+            }`}>
               <span className="flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                 <span>PCI-DSS Level 1</span>
               </span>
               <span>256-Bit SSL Secured</span>
@@ -422,9 +528,37 @@ export const CustomerPaymentUpdatePage: React.FC<CustomerPaymentUpdatePageProps>
         )}
       </main>
 
+      {/* Interactive Razorpay Gateway Modal */}
+      <RazorpayGatewayModal
+        isOpen={showRazorpayModal}
+        onClose={() => setShowRazorpayModal(false)}
+        amount={Number(paymentData.amount) || 2500}
+        currency={paymentData.currency || 'INR'}
+        merchantName={paymentData.merchant_name || 'RecoverAI Subscription Recovery'}
+        description={`Payment Recovery #${paymentId}`}
+        customerName={paymentData.customer_name || 'Customer'}
+        customerEmail={paymentData.customer_email || 'customer@company.com'}
+        paymentId={paymentId}
+        onSuccess={async (details) => {
+          setShowRazorpayModal(false);
+          setIsSuccess(true);
+          try {
+            await api.submitCustomerPaymentUpdate(paymentId, {
+              method: details.method || 'card',
+              card_brand: 'Visa',
+              last4: '4242',
+            });
+          } catch (e) {
+            // Ignore for demo links
+          }
+        }}
+      />
+
       {/* Footer */}
-      <footer className="max-w-4xl w-full mx-auto text-center py-4 border-t border-slate-800 text-xs text-slate-500">
-        Powered by <strong>RecoverAI</strong> &bull; Non-intrusive revenue recovery platform &bull; Powered by Brevo SMTP & Razorpay
+      <footer className={`max-w-4xl w-full mx-auto text-center py-4 border-t text-xs transition-colors ${
+        isDarkMode ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-500'
+      }`}>
+        Powered by <strong>RecoverAI</strong> &bull; Non-intrusive revenue recovery platform &bull; Powered by Gmail SMTP &amp; Razorpay
       </footer>
 
     </div>

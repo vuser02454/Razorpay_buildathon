@@ -258,7 +258,7 @@ def test_smtp_failure_diagnostics_isolation():
     error is generic and customer-safe, while technical error is isolated in diagnostic_error.
     """
     with patch("smtplib.SMTP", side_effect=smtplib.SMTPConnectError(421, "Cannot connect to mail relay")):
-        with patch.dict("os.environ", {"IS_DEMO_MODE": "false"}):
+        with patch.dict("os.environ", {"IS_DEMO_MODE": "false", "GMAIL_SMTP_USER": "test@gmail.com", "GMAIL_SMTP_PASSWORD": "app_password"}):
             res = EmailService._dispatch_smtp(
                 to_email="user@example.com",
                 subject="Test Failure",
@@ -266,7 +266,7 @@ def test_smtp_failure_diagnostics_isolation():
                 email_type=EmailType.RECOVERY_ACTION_REQUIRED
             )
             assert res["success"] is False
-            assert res["error"] == "Unable to send the recovery email at this time."
+            assert res["error"] == "We couldn't send your email right now. Please try again."
             assert "diagnostic_error" in res
             assert "SMTP" in res["diagnostic_error"] or "connect" in res["diagnostic_error"].lower()
 
@@ -290,7 +290,7 @@ def test_supabase_communication_audit_logging():
         customer_name="Audit Customer",
         customer_email="audit@example.in",
         subject="Audit Test Email",
-        provider="brevo",
+        provider="gmail",
         provider_message_id="msg_audit_123",
         status="SENT",
         email_type=EmailType.RECOVERY_ACTION_REQUIRED

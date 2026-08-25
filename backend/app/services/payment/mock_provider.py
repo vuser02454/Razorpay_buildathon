@@ -45,6 +45,18 @@ class MockPaymentProvider(PaymentProvider):
             }
         }
 
+    def retry_charge(self, payment_id: str, amount: float, currency: str = "INR", token_id: str = None) -> Dict[str, Any]:
+        res = self.charge_recurring(payment_id, amount, currency, token_id or f"tok_{payment_id[:8]}")
+        return {
+            "success": res.get("success", True),
+            "status": "success" if res.get("success", True) else "failed",
+            "payment_id": res.get("payment_id"),
+            "amount": amount,
+            "currency": currency,
+            "raw": res
+        }
+
+
     def verify_payment_status(self, payment_id: str) -> Dict[str, Any]:
         return {
             "success": True,

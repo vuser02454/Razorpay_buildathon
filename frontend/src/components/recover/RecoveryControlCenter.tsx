@@ -35,6 +35,7 @@ import { authStore } from '../../services/authStore';
 import { EmailPreviewModal } from './EmailPreviewModal';
 import { LangGraphVisualizerModal } from './LangGraphVisualizerModal';
 import { RazorpayConnectModal } from '../integrations/RazorpayConnectModal';
+import { RazorpayGatewayModal } from '../integrations/RazorpayGatewayModal';
 import { SHAPExplanationCard } from './SHAPExplanationCard';
 import { AIStatusPanel } from '../AIStatusPanel';
 
@@ -55,6 +56,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
   const [syncingRazorpay, setSyncingRazorpay] = useState(false);
   const [connectingRazorpay, setConnectingRazorpay] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [testingGateway, setTestingGateway] = useState(false);
   const [testStatusMsg, setTestStatusMsg] = useState<string | null>(null);
   const [quickSendingEmail, setQuickSendingEmail] = useState(false);
@@ -221,7 +223,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         'PAYMENT_UPDATE_REQUIRED'
       );
       if (res.success) {
-        setEmailNotification(`✓ Recovery email sent to ${selectedPayment.customer?.email} via Brevo SMTP`);
+        setEmailNotification(`✓ Recovery email sent to ${selectedPayment.customer?.email} via Gmail SMTP`);
         const commsRes = await api.getEmailHistory();
         setCommunications(commsRes);
         setTimeout(() => setEmailNotification(null), 5000);
@@ -348,6 +350,14 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${syncingRazorpay ? 'animate-spin' : ''}`} />
                     <span>{syncingRazorpay ? 'Syncing...' : 'Sync Payments'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowCheckoutModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Open Checkout</span>
                   </button>
 
                   <button
@@ -690,7 +700,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                 customerName={selectedPayment.customer?.name}
               />
 
-              {/* Customer Communication (Brevo SMTP Outgoing Dunning Section) */}
+              {/* Customer Communication (Gmail SMTP Outgoing Dunning Section) */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-950 dark:text-white">
@@ -703,7 +713,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                 </div>
 
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Dispatch failure-specific transactional email with 1-click payment update link powered by Brevo SMTP.
+                  Dispatch failure-specific transactional email with 1-click payment update link powered by Gmail SMTP.
                 </p>
 
                 <div className="flex items-center gap-2 pt-1">
@@ -854,8 +864,8 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
                     }}
                     className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 flex items-center justify-between transition cursor-pointer text-left"
                   >
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">06 EXECUTION (RAZORPAY / BREVO)</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓ {selectedPayment.latest_decision?.recommended_action === 'customer_action' ? 'BREVO SMTP RELAY' : 'RAZORPAY SCHEDULED'}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">06 EXECUTION (RAZORPAY / GMAIL SMTP)</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓ {selectedPayment.latest_decision?.recommended_action === 'customer_action' ? 'GMAIL SMTP RELAY' : 'RAZORPAY SCHEDULED'}</span>
                   </button>
 
                   <button
@@ -933,7 +943,7 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         initialNodeId={selectedGraphNodeId}
       />
 
-      {/* 3-Minute Razorpay Secure Email Verification & Gateway Connect Modal */}
+      {/* Razorpay Secure Email Verification & Gateway Connect Modal */}
       <RazorpayConnectModal
         isOpen={showConnectModal}
         onClose={() => setShowConnectModal(false)}
@@ -941,6 +951,33 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         onSuccess={async (newStatus) => {
           setRazorpayStatus(newStatus);
           await fetchDashboardData();
+        }}
+      />
+
+      {/* In-App Interactive Razorpay Gateway Modal */}
+      <RazorpayGatewayModal
+        isOpen={showCheckoutModal}
+        onClose={() => setShowCheckoutModal(false)}
+        amount={selectedPayment?.amount || 2500}
+        currency={selectedPayment?.currency || 'INR'}
+        merchantName="RecoverAI Recovery Gateway"
+        description="Payment Failure Recovery Sandbox Transaction"
+        customerName={selectedPayment?.customer?.name || 'Customer'}
+        customerEmail={selectedPayment?.customer?.email || 'customer@company.com'}
+        keyId={razorpayStatus?.key_id}
+        paymentId={selectedPayment?.id}
+        onSuccess={async (details) => {
+          setShowCheckoutModal(false);
+          setTestStatusMsg(`✓ Razorpay Payment Captured! (ID: ${details.razorpay_payment_id})`);
+          if (selectedPayment) {
+            try {
+              await api.simulateRetry(selectedPayment.id, 'success');
+              await fetchDashboardData();
+            } catch (e) {
+              // Ignore
+            }
+          }
+          setTimeout(() => setTestStatusMsg(null), 5000);
         }}
       />
     </div>

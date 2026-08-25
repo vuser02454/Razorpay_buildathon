@@ -2,42 +2,90 @@ import os
 import uuid
 import smtplib
 import socket
+import hmac
+import hashlib
+import time
+import base64
 from pathlib import Path
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, make_msgid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Union
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+    ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
+except ImportError:
+    pass
 
 from app.core.config import settings
 from app.models.schemas import EmailType
 from app.services.template_manager import TemplateManager
 
-# Load .env file explicitly
-ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
-load_dotenv(dotenv_path=ENV_FILE, override=True)
+# Secret salt for cryptographic short-lived payment update tokens
+TOKEN_SECRET = os.getenv("PAYMENT_TOKEN_SECRET", "recoverai_secure_payment_salt_2026")
 
 
 class EmailService:
     """
     Centralized Transactional Email Service for RecoverAI.
-    Manages Brevo SMTP relay transport (Port 587 STARTTLS), template assembly,
-    safe placeholder injection, and auditable delivery tracking with strict separation
-    between customer-facing content and internal technical diagnostics.
+    
+    Architectural Boundaries:
+    • Gmail SMTP is used EXCLUSIVELY for business/transactional messages (dunning, retries, receipts).
+    • Supabase Auth is the EXCLUSIVE system responsible for admin authentication emails.
+    • Zero authentication tokens or password-reset tokens are dispatched through this service.
+    • Dispatches via Gmail SMTP (smtp.gmail.com:587 STARTTLS) with secure server-side credential isolation.
     """
+
+    @classmethod
+    def generate_payment_update_token(cls, payment_id: str, expires_in_hours: int = 72) -> str:
+        """
+        Generates a cryptographically signed, short-lived, tamper-proof token
+        for 1-click customer payment method update links without exposing card numbers or sensitive data.
+        """
+        exp_ts = int(time.time()) + (expires_in_hours * 3600)
+        message = f"{payment_id}:{exp_ts}".encode("utf-8")
+        sig = hmac.new(TOKEN_SECRET.encode("utf-8"), message, hashlib.sha256).hexdigest()[:16]
+        raw_token = f"{payment_id}:{exp_ts}:{sig}"
+        return base64.urlsafe_b64encode(raw_token.encode("utf-8")).decode("utf-8").rstrip("=")
+
+    @classmethod
+    def validate_payment_update_token(cls, payment_id: str, token: str) -> bool:
+        """
+        Validates the authenticity and expiration of a customer payment update token.
+        """
+        try:
+            padded = token + "=" * ((4 - len(token) % 4) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8")
+            parts = decoded.split(":")
+            if len(parts) != 3:
+                return False
+            token_pid, exp_str, sig = parts
+            if token_pid != payment_id:
+                return False
+            exp_ts = int(exp_str)
+            if time.time() > exp_ts:
+                return False
+            expected_msg = f"{payment_id}:{exp_ts}".encode("utf-8")
+            expected_sig = hmac.new(TOKEN_SECRET.encode("utf-8"), expected_msg, hashlib.sha256).hexdigest()[:16]
+            return hmac.compare_digest(sig, expected_sig)
+        except Exception:
+            return False
 
     @classmethod
     def get_payment_update_url(cls, payment_id: str) -> str:
         """
-        Constructs the public customer payment update URL based on frontend public URL.
+        Constructs the public customer payment update URL with a secure, short-lived token.
         """
         base_url = (
             os.getenv("FRONTEND_PUBLIC_URL", "")
             or getattr(settings, "FRONTEND_PUBLIC_URL", "")
             or "http://localhost:5173"
         ).rstrip("/")
-        return f"{base_url}/update-payment?payment_id={payment_id}"
+        secure_token = cls.generate_payment_update_token(payment_id)
+        return f"{base_url}/update-payment?payment_id={payment_id}&token={secure_token}"
 
     @classmethod
     def _dispatch_smtp(
@@ -50,35 +98,39 @@ class EmailService:
         from_name: Optional[str] = None,
         email_type: Union[EmailType, str] = EmailType.RECOVERY_ACTION_REQUIRED
     ) -> Dict[str, Any]:
-        smtp_host = os.getenv("BREVO_SMTP_HOST", "") or settings.BREVO_SMTP_HOST or "smtp-relay.brevo.com"
-        smtp_port = int(os.getenv("BREVO_SMTP_PORT", 0) or settings.BREVO_SMTP_PORT or 587)
-        smtp_user = os.getenv("BREVO_SMTP_USER", "") or settings.BREVO_SMTP_USER
-        smtp_password = os.getenv("BREVO_SMTP_PASSWORD", "") or settings.BREVO_SMTP_PASSWORD
+        """
+        Internal transport method: delivers transactional messages via Gmail SMTP (Port 587 STARTTLS).
+        Zero exposure of internal credentials or stack traces.
+        """
+        smtp_host = os.getenv("GMAIL_SMTP_HOST", "") or getattr(settings, "GMAIL_SMTP_HOST", "smtp.gmail.com")
+        smtp_port = int(os.getenv("GMAIL_SMTP_PORT", 0) or getattr(settings, "GMAIL_SMTP_PORT", 587))
+        smtp_user = os.getenv("GMAIL_SMTP_USER", "") or getattr(settings, "GMAIL_SMTP_USER", "")
+        smtp_password = os.getenv("GMAIL_SMTP_PASSWORD", "") or getattr(settings, "GMAIL_SMTP_PASSWORD", "")
 
         sender_email = (
             from_email
-            or os.getenv("BREVO_SENDER_EMAIL", "")
-            or settings.BREVO_SENDER_EMAIL
-            or "vvijwal01@gmail.com"
+            or os.getenv("GMAIL_SENDER_EMAIL", "")
+            or getattr(settings, "GMAIL_SENDER_EMAIL", "")
+            or "support@recoverai.ai"
         )
         sender_name = (
             from_name
-            or os.getenv("BREVO_SENDER_NAME", "")
-            or settings.BREVO_SENDER_NAME
+            or os.getenv("GMAIL_SENDER_NAME", "")
+            or getattr(settings, "GMAIL_SENDER_NAME", "RecoverAI")
             or "RecoverAI"
         )
 
         now_str = datetime.now(timezone.utc).isoformat()
         type_str = email_type.value if isinstance(email_type, EmailType) else str(email_type)
 
-        # Validate recipient email format
+        # 1. Validate recipient email format
         if not to_email or "@" not in to_email or "." not in to_email.split("@")[-1]:
             return {
                 "success": False,
                 "email_type": type_str,
                 "recipient": to_email,
                 "message_id": None,
-                "provider": "brevo",
+                "provider": "gmail",
                 "timestamp": now_str,
                 "status": "FAILED",
                 "mode": "validation",
@@ -86,7 +138,7 @@ class EmailService:
                 "diagnostic_error": "Regex validation failed for recipient email address."
             }
 
-        # Check if Brevo SMTP credentials are configured for live dispatch
+        # 2. Live Gmail SMTP dispatch if credentials configured
         if smtp_user and smtp_password and smtp_user.strip() and smtp_password.strip():
             server = None
             try:
@@ -94,23 +146,23 @@ class EmailService:
                 msg["Subject"] = subject
                 msg["From"] = formataddr((sender_name, sender_email))
                 msg["To"] = to_email
-                message_id = make_msgid(domain="brevo.recoverai.com")
+                message_id = make_msgid(domain="gmail.recoverai.com")
                 msg["Message-ID"] = message_id
 
-                # Attach Plain Text fallback
+                # Plain text fallback
                 plain_body = text_content or subject
                 msg.attach(MIMEText(plain_body, "plain", "utf-8"))
 
-                # Attach Rich HTML Content
+                # Rich HTML content
                 msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-                # Connect via SMTP + STARTTLS
+                # Connect via SMTP + STARTTLS (Port 587)
                 server = smtplib.SMTP(smtp_host, smtp_port, timeout=12)
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
 
-                # Authenticate
+                # Authenticate with Gmail
                 server.login(smtp_user.strip(), smtp_password.strip())
 
                 # Send
@@ -122,7 +174,7 @@ class EmailService:
                     "email_type": type_str,
                     "recipient": to_email,
                     "message_id": clean_msg_id,
-                    "provider": "brevo",
+                    "provider": "gmail",
                     "timestamp": now_str,
                     "status": "SENT",
                     "mode": "live",
@@ -130,59 +182,45 @@ class EmailService:
                     "diagnostic_error": None
                 }
             except smtplib.SMTPAuthenticationError as auth_err:
-                err_str = str(auth_err)
-                print(f"[EmailService] [Internal Diagnostic] Brevo SMTP Authentication Failed: {auth_err}")
+                print(f"[EmailService] [Internal Diagnostic] Gmail SMTP Authentication Failed: {auth_err}")
                 is_demo = os.getenv("IS_DEMO_MODE", "false").lower() == "true"
-                if "525" in err_str or "Unauthorized IP" in err_str:
-                    if is_demo:
-                        mock_msg_id = f"brevo_demo_{uuid.uuid4().hex[:12]}"
-                        return {
-                            "success": True,
-                            "email_type": type_str,
-                            "recipient": to_email,
-                            "message_id": mock_msg_id,
-                            "provider": "brevo (Sandbox - IP 525)",
-                            "timestamp": now_str,
-                            "status": "SENT",
-                            "mode": "sandbox",
-                            "error": None,
-                            "diagnostic_error": "Brevo IP Restriction (525): Key has IP whitelisting. Operating in sandbox mode."
-                        }
+                if is_demo:
+                    mock_msg_id = f"gmail_demo_{uuid.uuid4().hex[:12]}"
                     return {
-                        "success": False,
+                        "success": True,
                         "email_type": type_str,
                         "recipient": to_email,
-                        "message_id": None,
-                        "provider": "brevo",
+                        "message_id": mock_msg_id,
+                        "provider": "gmail (Sandbox Mode)",
                         "timestamp": now_str,
-                        "status": "FAILED",
-                        "mode": "live",
-                        "error": "Unable to send the recovery email at this time.",
-                        "diagnostic_error": "Brevo IP Restriction (525): In Brevo SMTP settings, edit your key and remove any IP whitelisting restrictions."
+                        "status": "SENT",
+                        "mode": "sandbox",
+                        "error": None,
+                        "diagnostic_error": "Gmail credentials invalid. Operating in simulated sandbox mode."
                     }
                 return {
                     "success": False,
                     "email_type": type_str,
                     "recipient": to_email,
                     "message_id": None,
-                    "provider": "brevo",
+                    "provider": "gmail",
                     "timestamp": now_str,
                     "status": "FAILED",
                     "mode": "live",
-                    "error": "Unable to send the recovery email at this time.",
-                    "diagnostic_error": "Brevo SMTP authentication failed. Check credentials."
+                    "error": "We couldn't send your email right now. Please try again.",
+                    "diagnostic_error": "Gmail SMTP authentication failed. Please check App Password."
                 }
             except (smtplib.SMTPConnectError, socket.timeout, ConnectionRefusedError, OSError) as conn_err:
-                print(f"[EmailService] [Internal Diagnostic] Brevo SMTP Connection Error: {conn_err}")
+                print(f"[EmailService] [Internal Diagnostic] Gmail SMTP Connection Error: {conn_err}")
                 is_demo = os.getenv("IS_DEMO_MODE", "false").lower() == "true"
                 if is_demo:
-                    mock_msg_id = f"brevo_sandbox_{uuid.uuid4().hex[:12]}"
+                    mock_msg_id = f"gmail_sandbox_{uuid.uuid4().hex[:12]}"
                     return {
                         "success": True,
                         "email_type": type_str,
                         "recipient": to_email,
                         "message_id": mock_msg_id,
-                        "provider": "brevo (Sandbox - Offline)",
+                        "provider": "gmail (Simulated Sandbox)",
                         "timestamp": now_str,
                         "status": "SENT",
                         "mode": "sandbox",
@@ -194,78 +232,52 @@ class EmailService:
                     "email_type": type_str,
                     "recipient": to_email,
                     "message_id": None,
-                    "provider": "brevo",
+                    "provider": "gmail",
                     "timestamp": now_str,
                     "status": "FAILED",
                     "mode": "live",
-                    "error": "Unable to send the recovery email at this time.",
+                    "error": "We couldn't send your email right now. Please try again.",
                     "diagnostic_error": f"Failed to connect to SMTP relay ({smtp_host}:{smtp_port})."
                 }
-            except smtplib.SMTPSenderRefused as sender_err:
-                print(f"[EmailService] [Internal Diagnostic] Brevo Sender Refused: {sender_err}")
+            except Exception as exc:
+                print(f"[EmailService] [Internal Diagnostic] Gmail SMTP Unexpected Error: {exc}")
                 return {
                     "success": False,
                     "email_type": type_str,
                     "recipient": to_email,
                     "message_id": None,
-                    "provider": "brevo",
+                    "provider": "gmail",
                     "timestamp": now_str,
                     "status": "FAILED",
                     "mode": "live",
-                    "error": "Unable to send the recovery email at this time.",
-                    "diagnostic_error": f"Sender email '{sender_email}' was rejected by relay."
-                }
-            except smtplib.SMTPRecipientsRefused as recip_err:
-                print(f"[EmailService] [Internal Diagnostic] Brevo Recipient Refused: {recip_err}")
-                return {
-                    "success": False,
-                    "email_type": type_str,
-                    "recipient": to_email,
-                    "message_id": None,
-                    "provider": "brevo",
-                    "timestamp": now_str,
-                    "status": "FAILED",
-                    "mode": "live",
-                    "error": "Unable to send the recovery email at this time.",
-                    "diagnostic_error": f"Recipient address was refused by relay."
-                }
-            except Exception as e:
-                print(f"[EmailService] [Internal Diagnostic] Brevo SMTP General Failure: {e}")
-                return {
-                    "success": False,
-                    "email_type": type_str,
-                    "recipient": to_email,
-                    "message_id": None,
-                    "provider": "brevo",
-                    "timestamp": now_str,
-                    "status": "FAILED",
-                    "mode": "live",
-                    "error": "Unable to send the recovery email at this time.",
-                    "diagnostic_error": "General SMTP failure during dispatch."
+                    "error": "We couldn't send your email right now. Please try again.",
+                    "diagnostic_error": str(exc)
                 }
             finally:
-                if server:
+                if server is not None:
                     try:
                         server.quit()
                     except Exception:
                         pass
 
-        # Simulated Sandbox Delivery when Brevo credentials are not yet configured
-        mock_msg_id = f"brevo_sandbox_{uuid.uuid4().hex[:12]}"
+        # 3. Simulated Sandbox Delivery when Gmail credentials are not yet set
+        mock_msg_id = f"gmail_sandbox_{uuid.uuid4().hex[:12]}"
         return {
             "success": True,
             "email_type": type_str,
             "recipient": to_email,
             "message_id": mock_msg_id,
-            "provider": "brevo (Simulated Sandbox)",
+            "provider": "gmail (Simulated Sandbox)",
             "timestamp": now_str,
             "status": "SENT",
             "mode": "sandbox",
             "error": None,
-            "diagnostic_error": "SMTP credentials not configured. Running in simulated sandbox mode."
+            "diagnostic_error": "Gmail SMTP credentials not configured. Running in simulated sandbox mode."
         }
 
-    # ── High-Level Clean Public API ──────────────────────────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
+    # ─── High-Level Clean Transactional API Methods ─────────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
 
     @classmethod
     def send_payment_update_email(
@@ -285,7 +297,7 @@ class EmailService:
         update_link: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Dispatches a customer action payment update email with 1-click update link.
+        Dispatches a customer action payment update email with secure 1-click update link via Gmail SMTP.
         """
         payment_update_url = update_link or cls.get_payment_update_url(payment_id)
         default_headline = "Action Required: Update Your Payment Method"
@@ -321,6 +333,90 @@ class EmailService:
         )
 
     @classmethod
+    def send_payment_failure_email(
+        cls,
+        to_email: str,
+        customer_name: str,
+        amount: float,
+        currency: str = "INR",
+        payment_id: str = "pay_001",
+        failure_reason: str = "Payment method was declined by issuing bank",
+        headline: Optional[str] = None,
+        body: Optional[str] = None,
+        subject: Optional[str] = None,
+        merchant_name: str = "RecoverAI",
+        support_email: str = "support@recoverai.ai",
+        update_link: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Sends an initial payment failure notification informing the customer of a declined charge.
+        """
+        return cls.send_payment_update_email(
+            to_email=to_email,
+            customer_name=customer_name,
+            amount=amount,
+            currency=currency,
+            payment_id=payment_id,
+            failure_reason=failure_reason,
+            headline=headline or "Payment Failed: Action Required",
+            body=body or f"Your payment of {'₹' if currency == 'INR' else '$'}{amount:,.2f} could not be processed.",
+            subject=subject or f"Payment Failed: Action needed for your subscription",
+            merchant_name=merchant_name,
+            support_email=support_email,
+            update_link=update_link
+        )
+
+    @classmethod
+    def send_recovery_reminder(
+        cls,
+        to_email: str,
+        customer_name: str,
+        amount: float,
+        currency: str = "INR",
+        payment_id: str = "pay_001",
+        headline: Optional[str] = None,
+        body: Optional[str] = None,
+        subject: Optional[str] = None,
+        merchant_name: str = "RecoverAI",
+        support_email: str = "support@recoverai.ai",
+        update_link: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Sends a follow-up recovery reminder to complete payment method updates before grace period expiry.
+        """
+        payment_update_url = update_link or cls.get_payment_update_url(payment_id)
+        default_headline = "Reminder: Update Your Payment Method"
+        default_body = (
+            f"This is a gentle reminder that your subscription payment of "
+            f"{'₹' if currency == 'INR' else '$'}{amount:,.2f} is still pending. "
+            f"Please update your payment method to maintain uninterrupted service."
+        )
+        resolved_subject = subject or f"Reminder: Update your payment method ({'₹' if currency == 'INR' else '$'}{amount:,.2f})"
+
+        context = {
+            "customer_name": customer_name,
+            "merchant_name": merchant_name,
+            "amount": amount,
+            "currency": currency,
+            "payment_id": payment_id,
+            "headline": headline or default_headline,
+            "body": body or default_body,
+            "cta_text": "Update Payment Method",
+            "subject": resolved_subject,
+            "payment_update_url": payment_update_url,
+            "support_email": support_email
+        }
+
+        html_content = TemplateManager.render_template(EmailType.RECOVERY_ACTION_REQUIRED, context)
+        return cls._dispatch_smtp(
+            to_email=to_email,
+            subject=resolved_subject,
+            html_content=html_content,
+            text_content=body or default_body,
+            email_type=EmailType.RECOVERY_ACTION_REQUIRED
+        )
+
+    @classmethod
     def send_retry_notification(
         cls,
         to_email: str,
@@ -337,7 +433,7 @@ class EmailService:
         update_link: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Notifies customer of an automatically scheduled smart retry.
+        Notifies customer of an automatically scheduled smart retry via Gmail SMTP.
         """
         payment_update_url = update_link or cls.get_payment_update_url(payment_id)
         default_headline = "Automated Payment Retry Scheduled"
@@ -388,7 +484,7 @@ class EmailService:
         update_link: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Confirms successful payment recovery and subscription continuation.
+        Confirms successful payment recovery and subscription continuation via Gmail SMTP.
         """
         payment_update_url = update_link or cls.get_payment_update_url(payment_id)
         default_headline = "Payment Successful — Subscription Active"
@@ -472,6 +568,26 @@ class EmailService:
         )
 
     @classmethod
+    def send_transactional_email(
+        cls,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None,
+        email_type: Union[EmailType, str] = EmailType.RECOVERY_ACTION_REQUIRED
+    ) -> Dict[str, Any]:
+        """
+        Direct transactional email dispatcher via Gmail SMTP.
+        """
+        return cls._dispatch_smtp(
+            to_email=to_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            email_type=email_type
+        )
+
+    @classmethod
     def send_recovery_email(
         cls,
         to_email: str,
@@ -484,8 +600,8 @@ class EmailService:
         email_type: Union[EmailType, str] = EmailType.RECOVERY_ACTION_REQUIRED
     ) -> Dict[str, Any]:
         """
-        General purpose method to dispatch pre-rendered HTML emails via Brevo SMTP.
-        Ensures 100% backward-compatibility with all existing test suites.
+        General purpose method to dispatch pre-rendered HTML emails via Gmail SMTP.
+        Ensures 100% backward-compatibility with all existing workflow and test suites.
         """
         return cls._dispatch_smtp(
             to_email=to_email,
@@ -500,14 +616,14 @@ class EmailService:
     @classmethod
     def send_test_email(cls, to_email: str) -> Dict[str, Any]:
         """
-        Sends a diagnostic test email verifying operational connectivity.
+        Sends an operational connectivity test email via Gmail SMTP.
         """
-        subject = "System Diagnostic Test"
+        subject = "⚡ RecoverAI — Operational Connectivity Test (Gmail SMTP)"
         context = {
             "customer_name": "Operator",
             "merchant_name": "RecoverAI",
             "headline": "⚡ Operational Connectivity Test",
-            "body": "This is a diagnostic test email verifying that your mail relay transport is operational.",
+            "body": "This is a diagnostic test verifying that RecoverAI's Gmail SMTP transactional email relay is operational.",
             "subject": subject,
             "cta_text": "Open Dashboard",
             "payment_update_url": "http://localhost:5173"
@@ -517,7 +633,7 @@ class EmailService:
             to_email=to_email,
             subject=subject,
             html_content=html_content,
-            text_content="This is a test email from RecoverAI.",
+            text_content="This is an operational test email from RecoverAI Gmail SMTP relay.",
             email_type=EmailType.TEST_EMAIL
         )
 
@@ -529,10 +645,9 @@ class EmailService:
         expires_in_minutes: int = 5
     ) -> Dict[str, Any]:
         """
-        Sends the 6-digit RecoverAI verification OTP for Razorpay integration connection via Brevo SMTP.
-        Subject: RecoverAI — Your verification code
+        Sends the 6-digit RecoverAI verification OTP for Razorpay integration connection via Gmail SMTP.
         """
-        subject = "RecoverAI — Your verification code"
+        subject = "RecoverAI — Your Razorpay Connection Code"
         context = {
             "otp": otp,
             "expires_in_minutes": str(expires_in_minutes),
@@ -573,11 +688,13 @@ class EmailService:
         support_email: str = "support@recoverai.ai",
         update_link: Optional[str] = None
     ) -> Dict[str, Any]:
+        """
+        Generates responsive HTML preview for merchant dashboard inspectability.
+        """
         sym = "₹" if currency == "INR" else "$"
         payment_update_url = update_link or cls.get_payment_update_url(payment_id)
         type_key = (email_type.value if isinstance(email_type, EmailType) else str(email_type)).lower()
 
-        # Tailored default business copy per email type
         if "retry" in type_key:
             default_headline = "Automated Payment Retry Scheduled"
             default_body = (

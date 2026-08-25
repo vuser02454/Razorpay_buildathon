@@ -20,19 +20,20 @@ class Settings(BaseModel):
     # Supabase Credentials
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
     
     # Razorpay Credentials
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "rzp_test_mock_10293")
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "mock_secret_84920")
     RAZORPAY_WEBHOOK_SECRET: str = os.getenv("RAZORPAY_WEBHOOK_SECRET", "mock_webhook_secret")
     
-    # Brevo SMTP Configuration
-    BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com")
-    BREVO_SMTP_PORT: int = int(os.getenv("BREVO_SMTP_PORT", "587"))
-    BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "")
-    BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "")
-    BREVO_SENDER_EMAIL: str = os.getenv("BREVO_SENDER_EMAIL", "")
-    BREVO_SENDER_NAME: str = os.getenv("BREVO_SENDER_NAME", "RecoverAI")
+    # Gmail SMTP Configuration (Transactional Business Emails Only)
+    GMAIL_SMTP_HOST: str = os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com")
+    GMAIL_SMTP_PORT: int = int(os.getenv("GMAIL_SMTP_PORT", "587"))
+    GMAIL_SMTP_USER: str = os.getenv("GMAIL_SMTP_USER", "")
+    GMAIL_SMTP_PASSWORD: str = os.getenv("GMAIL_SMTP_PASSWORD", "")
+    GMAIL_SENDER_EMAIL: str = os.getenv("GMAIL_SENDER_EMAIL", "")
+    GMAIL_SENDER_NAME: str = os.getenv("GMAIL_SENDER_NAME", "RecoverAI")
     
     # AI LLM Provider Configuration
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -48,4 +49,10 @@ class Settings(BaseModel):
     DEFAULT_HUMAN_REVIEW_CONFIDENCE_THRESHOLD: float = float(os.getenv("DEFAULT_HUMAN_REVIEW_CONFIDENCE_THRESHOLD", "0.60"))
     DEFAULT_DUNNING_ENABLED: bool = True
 
+    # Celery & Redis Automation Architecture
+    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
 settings = Settings()
+

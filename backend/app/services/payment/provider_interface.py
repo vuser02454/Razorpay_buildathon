@@ -13,6 +13,12 @@ class PaymentProvider(ABC):
         pass
     
     @abstractmethod
+    def retry_charge(self, payment_id: str, amount: float, currency: str, token_id: Optional[str] = None) -> Dict[str, Any]:
+        """Attempt an automated smart retry charge."""
+        pass
+
+    
+    @abstractmethod
     def verify_payment_status(self, payment_id: str) -> Dict[str, Any]:
         """Fetch current payment status from payment gateway."""
         pass

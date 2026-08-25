@@ -39,7 +39,7 @@ def communication_node(state: RecoveryState) -> Dict[str, Any]:
     email_required = state.get("email_required", True)
     email_sent = False
     message_id = None
-    provider_name = "brevo"
+    provider_name = "gmail"
 
     if email_required:
         email_data = dunning_payload.get("email", {})

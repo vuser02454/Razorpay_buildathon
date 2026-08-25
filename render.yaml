@@ -16,17 +16,17 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
-      - key: BREVO_SMTP_HOST
-        value: smtp-relay.brevo.com
-      - key: BREVO_SMTP_PORT
+      - key: GMAIL_SMTP_HOST
+        value: smtp.gmail.com
+      - key: GMAIL_SMTP_PORT
         value: "587"
-      - key: BREVO_SMTP_USER
+      - key: GMAIL_SMTP_USER
         sync: false
-      - key: BREVO_SMTP_PASSWORD
+      - key: GMAIL_SMTP_PASSWORD
         sync: false
-      - key: BREVO_SENDER_EMAIL
+      - key: GMAIL_SENDER_EMAIL
         sync: false
-      - key: BREVO_SENDER_NAME
+      - key: GMAIL_SENDER_NAME
         value: RecoverAI
       - key: GEMINI_API_KEY
         sync: false

@@ -12,7 +12,7 @@ from app.core.config import settings
 app = FastAPI(
     title="RecoverAI Platform",
     version=settings.VERSION,
-    description="RecoverAI — Autonomous AI Revenue Recovery Platform with Brevo SMTP Relay"
+    description="RecoverAI — Autonomous AI Revenue Recovery Platform with Gmail SMTP Relay"
 )
 
 # Enable CORS for frontend Vite dev server (port 5173, 5175, etc.)
@@ -28,12 +28,12 @@ app.include_router(auth_router, prefix=f"{settings.API_PREFIX}/auth", tags=["Aut
 app.include_router(assistant_router, prefix=f"{settings.API_PREFIX}/assistant", tags=["AI Assistant"])
 app.include_router(razorpay_router, prefix=f"{settings.API_PREFIX}/razorpay", tags=["Razorpay Gateway"])
 app.include_router(razorpay_router, prefix=f"{settings.API_PREFIX}/integrations/razorpay", tags=["Razorpay Integrations"])
-app.include_router(communication_router, prefix=f"{settings.API_PREFIX}/recovery/email", tags=["Brevo SMTP Delivery"])
+app.include_router(communication_router, prefix=f"{settings.API_PREFIX}/recovery/email", tags=["Gmail SMTP Delivery"])
 app.include_router(communication_router, prefix=f"{settings.API_PREFIX}/recovery", tags=["Recovery Emails"])
 app.include_router(api_router, prefix=settings.API_PREFIX, tags=["Recovery Engine"])
 
 # Direct top-level test email route: POST /api/email/test
-@app.post(f"{settings.API_PREFIX}/email/test", response_model=TestEmailResponse, tags=["Brevo SMTP Delivery"])
+@app.post(f"{settings.API_PREFIX}/email/test", response_model=TestEmailResponse, tags=["Gmail SMTP Delivery"])
 async def top_level_test_email(payload: TestEmailRequest):
     return await test_email_endpoint(payload)
 
@@ -43,7 +43,7 @@ def root():
         "app": "RecoverAI",
         "tagline": "Recover revenue intelligently. Not blindly.",
         "ai_engines": ["Google Gemini (Platform Intelligence)", "Grok (Conversational Co-Pilot)"],
-        "email_delivery": "Brevo SMTP Relay",
+        "email_delivery": "Gmail SMTP Relay",
         "payment_gateway": "Razorpay Multi-Tenant OAuth",
         "docs": "/docs",
         "health": "/api/health"

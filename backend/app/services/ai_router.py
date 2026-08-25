@@ -156,8 +156,19 @@ class AIRouter:
         gemini_key = bool(settings.GEMINI_API_KEY and len(settings.GEMINI_API_KEY) > 5)
         groq_key = bool(settings.GROQ_API_KEY and len(settings.GROQ_API_KEY) > 5)
         openrouter_key = bool(settings.OPENROUTER_API_KEY and len(settings.OPENROUTER_API_KEY) > 5)
-        brevo_auth = bool(settings.BREVO_SMTP_USER and settings.BREVO_SMTP_PASSWORD)
+        gmail_auth = bool(settings.GMAIL_SMTP_USER and settings.GMAIL_SMTP_PASSWORD)
         supabase_auth = bool(settings.SUPABASE_URL and settings.SUPABASE_KEY)
+        razorpay_auth = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET)
+
+        # Check Redis connectivity if available
+        redis_connected = True
+        try:
+            import redis
+            r = redis.from_url(settings.REDIS_URL, socket_timeout=1)
+            r.ping()
+            redis_status = "operational"
+        except Exception:
+            redis_status = "standby" if settings.IS_DEMO_MODE else "unavailable"
 
         return {
             "gemini": {
@@ -184,11 +195,29 @@ class AIRouter:
                 "status": "operational",
                 "nodes_count": 7
             },
-            "brevo": {
-                "name": "Brevo SMTP",
+            "celery": {
+                "name": "Celery Worker",
+                "role": "Background & Scheduled Automation",
+                "status": "operational",
+                "broker": "Redis"
+            },
+            "redis": {
+                "name": "Redis Broker",
+                "role": "Celery Message Broker & Result Store",
+                "status": redis_status,
+                "url": settings.REDIS_URL
+            },
+            "gmail": {
+                "name": "Gmail SMTP",
                 "role": "Transactional Email Delivery",
-                "status": "operational" if brevo_auth else "sandbox",
+                "status": "operational" if gmail_auth else "sandbox",
                 "port": 587
+            },
+            "razorpay": {
+                "name": "Razorpay Gateway",
+                "role": "Payment Processing & Auto-Retries",
+                "status": "operational" if razorpay_auth else "sandbox",
+                "mode": "sandbox" if settings.IS_DEMO_MODE else "live"
             },
             "supabase": {
                 "name": "Supabase PostgreSQL",
@@ -215,10 +244,24 @@ class AIRouter:
             return {"provider": "OpenRouter", "status": "operational" if has_key else "standby", "role": "Fallback Reasoning"}
         elif p == "langgraph":
             return {"provider": "LangGraph", "status": "operational", "role": "Recovery State Machine"}
-        elif p == "brevo":
-            has_auth = bool(settings.BREVO_SMTP_USER and settings.BREVO_SMTP_PASSWORD)
-            return {"provider": "Brevo SMTP", "status": "operational" if has_auth else "sandbox", "role": "Transactional Email"}
+        elif p == "celery":
+            return {"provider": "Celery Worker", "status": "operational", "role": "Background & Scheduled Execution", "broker": "Redis"}
+        elif p == "redis":
+            try:
+                import redis
+                r = redis.from_url(settings.REDIS_URL, socket_timeout=1)
+                r.ping()
+                return {"provider": "Redis Broker", "status": "operational", "role": "Message Broker & Result Store"}
+            except Exception:
+                return {"provider": "Redis Broker", "status": "standby" if settings.IS_DEMO_MODE else "unavailable", "role": "Message Broker & Result Store"}
+        elif p in ("gmail", "smtp", "brevo"):
+            has_auth = bool(settings.GMAIL_SMTP_USER and settings.GMAIL_SMTP_PASSWORD)
+            return {"provider": "Gmail SMTP", "status": "operational" if has_auth else "sandbox", "role": "Transactional Email"}
+        elif p == "razorpay":
+            has_auth = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET)
+            return {"provider": "Razorpay Gateway", "status": "operational" if has_auth else "sandbox", "role": "Payment Gateway"}
         elif p == "supabase":
             return {"provider": "Supabase PostgreSQL", "status": "operational", "role": "Database Storage"}
         else:
             return {"provider": provider_name, "status": "unknown"}
+

@@ -214,9 +214,9 @@ export const LangGraphVisualizerModal: React.FC<LangGraphVisualizerModalProps> =
     retry_action: {
       id: 'retry_action',
       number: '05A',
-      name: 'RETRY ACTION',
+      name: 'RETRY ACTION (CELERY + REDIS)',
       type: 'GATEWAY',
-      provider: 'Razorpay / Mock Gateway',
+      provider: 'Celery + Redis Background Worker (Razorpay Charge)',
       status: branchType === 'retry' ? 'completed' : 'skipped',
       summary: branchType === 'retry' ? 'Scheduled: Tomorrow 09:30 AM' : 'Branch Not Selected',
       durationMs: 45,
@@ -224,25 +224,28 @@ export const LangGraphVisualizerModal: React.FC<LangGraphVisualizerModalProps> =
         payment_id: payment.id,
         amount: amount,
         currency: payment.currency,
-        target_clearing_window: '09:30 AM'
+        target_clearing_window: '09:30 AM',
+        worker_broker: 'Redis (redis://localhost:6379/0)'
       },
       outputs: {
         status: 'retry_scheduled',
+        celery_task_id: `task_${payment.id}`,
         retry_job_id: `rtr_${payment.id}`,
         tokenized_charge: true
       },
       factors: [
-        'No raw PAN/CVV transmitted (PCI-DSS tokenized)',
-        'Registered with Razorpay recurring batch queue',
-        'Morning liquidity cycle clearing target set'
+        'Celery background task scheduled with Redis broker (non-blocking orchestration)',
+        'No raw PAN/CVV transmitted (PCI-DSS tokenized charge)',
+        'Pre-execution deterministic safety gate verified'
       ]
     },
+
     communication: {
       id: 'communication',
       number: '05B',
       name: 'CUSTOMER COMMUNICATION',
       type: 'DELIVERY',
-      provider: 'Brevo SMTP (Port 587) + Gemini',
+      provider: 'Gmail SMTP (Port 587) + Gemini',
       status: branchType === 'communication' ? 'completed' : 'skipped',
       summary: branchType === 'communication' ? '1-Click Update Email Dispatched' : 'Branch Not Selected',
       durationMs: 210,
@@ -253,13 +256,13 @@ export const LangGraphVisualizerModal: React.FC<LangGraphVisualizerModalProps> =
       },
       outputs: {
         email_sent: branchType === 'communication',
-        provider: 'Brevo SMTP Relay (STARTTLS)',
-        message_id: `msg_brevo_${payment.id}`
+        provider: 'Gmail SMTP Relay (STARTTLS)',
+        message_id: `msg_gmail_${payment.id}`
       },
       factors: [
         'Personalized empathetic copy authored by Google Gemini',
         '1-click secure payment method update link embedded',
-        'Direct delivery via Brevo Port 587'
+        'Direct delivery via Gmail SMTP Port 587'
       ]
     },
     human_review: {
@@ -583,7 +586,7 @@ export const LangGraphVisualizerModal: React.FC<LangGraphVisualizerModalProps> =
                   }`}
                 >
                   <div className="text-[9px] font-mono font-bold text-amber-600 dark:text-amber-400">05B DUNNING</div>
-                  <div className="text-[11px] font-extrabold text-slate-900 dark:text-white mt-0.5">Brevo SMTP</div>
+                  <div className="text-[11px] font-extrabold text-slate-900 dark:text-white mt-0.5">Gmail SMTP</div>
                   <span className="text-[9px] font-mono text-slate-500">{branchType === 'communication' ? '● EXECUTED' : '○ SKIPPED'}</span>
                 </button>
 

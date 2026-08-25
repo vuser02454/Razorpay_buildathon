@@ -160,7 +160,7 @@ class RecoveryCommunication(BaseModel):
     channel: str = "email"
     email_type: EmailType = EmailType.PAYMENT_UPDATE_REQUIRED
     subject: str
-    provider: str = "brevo"
+    provider: str = "gmail"
     provider_message_id: Optional[str] = None
     status: str = "SENT" # QUEUED, SENDING, SENT, FAILED
     error_message: Optional[str] = None
@@ -236,6 +236,7 @@ class ClosedLoopMetric(BaseModel):
 class RazorpayConnectionStatus(BaseModel):
     is_connected: bool = False
     account_id: Optional[str] = None
+    key_id: Optional[str] = None
     merchant_name: Optional[str] = None
     merchant_email: Optional[str] = None
     last_synced_at: Optional[str] = None
@@ -271,6 +272,8 @@ class RazorpayAuthorizeRequest(BaseModel):
     email: str
     account_id: Optional[str] = None
     merchant_name: Optional[str] = None
+    key_id: Optional[str] = None
+    key_secret: Optional[str] = None
 
 class RazorpayTestConnectionResponse(BaseModel):
     success: bool
@@ -306,7 +309,7 @@ class EmailSendRequest(BaseModel):
 class EmailSendResponse(BaseModel):
     success: bool
     message: str
-    provider: str = "brevo"
+    provider: str = "gmail"
     provider_message_id: Optional[str] = None
     communication: Optional[RecoveryCommunication] = None
 
@@ -315,7 +318,7 @@ class TestEmailRequest(BaseModel):
 
 class TestEmailResponse(BaseModel):
     success: bool
-    provider: str = "brevo"
+    provider: str = "gmail"
     message: str
     provider_message_id: Optional[str] = None
 
@@ -330,3 +333,37 @@ class SimulateFailureRequest(BaseModel):
 class SimulateRetryRequest(BaseModel):
     payment_id: str
     outcome: str = "success" # success, failed
+
+class RecoveryJobStatus(str, Enum):
+    QUEUED = "QUEUED"
+    SCHEDULED = "SCHEDULED"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+class RecoveryJob(BaseModel):
+    id: str
+    admin_id: str
+    payment_id: str
+    task_type: str # "schedule_payment_retry" | "send_recovery_email" | "process_recovery_outcome"
+    celery_task_id: Optional[str] = None
+    status: RecoveryJobStatus = RecoveryJobStatus.QUEUED
+    scheduled_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+    updated_at: str
+
+class ScheduleRetryRequest(BaseModel):
+    payment_id: str
+    scheduled_at: Optional[str] = None
+    recovery_execution_id: Optional[str] = None
+
+class ScheduleEmailRequest(BaseModel):
+    payment_id: str
+    recovery_execution_id: Optional[str] = None
+

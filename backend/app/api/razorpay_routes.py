@@ -27,7 +27,7 @@ async def request_razorpay_verification(
 ):
     """
     Generates a secure 6-digit RecoverAI verification OTP, hashes it server-side,
-    and sends the code to the merchant's email address via Brevo SMTP.
+    and sends the code to the merchant's email address via Gmail SMTP.
     NEVER logs or exposes the raw OTP in the API response or server debug traces.
     """
     clean_email = payload.email.strip().lower()
@@ -48,7 +48,7 @@ async def request_razorpay_verification(
             resend_cooldown_seconds=cooldown
         )
 
-    # Dispatch email via Brevo SMTP
+    # Dispatch email via Gmail SMTP
     try:
         email_res = EmailService.send_verification_otp_email(
             to_email=clean_email,
@@ -117,16 +117,16 @@ async def authorize_razorpay_connection(
     """
     Completes the Razorpay gateway connection after verifying email ownership.
     """
-    clean_email = payload.email.strip().lower()
+    clean_email = payload.email.strip().lower() if payload.email else admin.email
     
-    # Verify that email was verified before establishing connection
-    if not store.is_email_verified(admin.id, clean_email) and not admin.is_demo:
+    # Verify email only if not providing direct API keys and not demo admin
+    if not payload.key_id and not store.is_email_verified(admin.id, clean_email) and not admin.is_demo:
         raise HTTPException(
             status_code=400,
-            detail="Please verify your email address with the verification code before connecting Razorpay."
+            detail="Please verify your email address with the verification code or provide your Razorpay Key ID."
         )
 
-    new_account_id = payload.account_id or f"acc_rzp_{uuid.uuid4().hex[:8]}"
+    new_account_id = payload.account_id or (payload.key_id[:12] if payload.key_id else f"acc_rzp_{uuid.uuid4().hex[:8]}")
     merchant_name = payload.merchant_name or f"{admin.name} Store"
 
     conn = store.connect_razorpay(
@@ -135,7 +135,9 @@ async def authorize_razorpay_connection(
         access_token=f"rzp_live_tok_{uuid.uuid4().hex[:16]}",
         refresh_token=f"rzp_live_ref_{uuid.uuid4().hex[:16]}",
         merchant_name=merchant_name,
-        merchant_email=clean_email
+        merchant_email=clean_email,
+        key_id=payload.key_id,
+        key_secret=payload.key_secret
     )
 
     return {

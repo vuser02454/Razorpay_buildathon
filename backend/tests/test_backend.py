@@ -102,7 +102,7 @@ def test_admin_data_isolation():
     assert len(new_payments["items"]) == 0
 
 @pytest.mark.anyio
-async def test_brevo_smtp_email_service_and_multi_tenant_communication():
+async def test_gmail_smtp_email_service_and_multi_tenant_communication():
     html = EmailService.build_responsive_html_template(
         customer_name="Rahul Sharma",
         headline="Payment Update Required",
@@ -124,7 +124,7 @@ async def test_brevo_smtp_email_service_and_multi_tenant_communication():
         html_content=html
     )
     assert res["success"] is True
-    assert "brevo" in res["provider"].lower()
+    assert "gmail" in res["provider"].lower()
     assert res["message_id"] is not None
 
     # Test Test Email Helper
@@ -206,7 +206,7 @@ async def test_ai_provider_health_checks():
     assert "groq" in status
     assert "openrouter" in status
     assert "langgraph" in status
-    assert "brevo" in status
+    assert "gmail" in status
     assert "supabase" in status
 
     # Check individual health queries
@@ -214,3 +214,62 @@ async def test_ai_provider_health_checks():
     assert AIRouter.get_provider_health("groq")["provider"] == "Groq"
     assert AIRouter.get_provider_health("langgraph")["status"] == "operational"
     assert AIRouter.get_provider_health("supabase")["status"] == "operational"
+
+def test_supabase_auth_exclusive_and_tenant_security():
+    import base64
+    import json
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.api.auth import get_current_admin, verify_supabase_jwt, DEMO_ADMIN
+
+    client = TestClient(app)
+
+    # 1. Test Demo Admin endpoint
+    demo_res = client.post("/api/auth/demo")
+    assert demo_res.status_code == 200
+    demo_data = demo_res.json()
+    assert "token" in demo_data
+    assert demo_data["admin"]["id"] == DEMO_ADMIN.id
+
+    # 2. Construct mock Supabase JWT for User Alpha
+    header_b64 = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()).decode().rstrip("=")
+    payload_a = {
+        "sub": "usr_supabase_aaa",
+        "email": "user_a@company.com",
+        "user_metadata": {"full_name": "User Alpha"},
+        "exp": 9999999999
+    }
+    payload_a_b64 = base64.urlsafe_b64encode(json.dumps(payload_a).encode()).decode().rstrip("=")
+    token_a = f"{header_b64}.{payload_a_b64}.signature_mock"
+
+    # Verify identity derived from Supabase JWT
+    admin_a = verify_supabase_jwt(token_a)
+    assert admin_a.id == "usr_supabase_aaa"
+    assert admin_a.email == "user_a@company.com"
+    assert admin_a.name == "User Alpha"
+    assert not admin_a.is_demo
+
+    # 3. Test authenticated endpoint with User Alpha's Supabase JWT
+    auth_headers_a = {"Authorization": f"Bearer {token_a}"}
+    me_res = client.get("/api/auth/me", headers=auth_headers_a)
+    assert me_res.status_code == 200
+    assert me_res.json()["id"] == "usr_supabase_aaa"
+
+    # 4. Multi-Tenant Security: Valid X-Admin-Id matching authenticated user passes
+    valid_tenant_res = client.get(
+        "/api/auth/me",
+        headers={**auth_headers_a, "X-Admin-Id": "usr_supabase_aaa"}
+    )
+    assert valid_tenant_res.status_code == 200
+
+    # 5. Multi-Tenant Security: Spoofed X-Admin-Id (User A trying to access User B's tenant) is REJECTED with 403
+    spoofed_res = client.get(
+        "/api/auth/me",
+        headers={**auth_headers_a, "X-Admin-Id": "usr_supabase_bbb"}
+    )
+    assert spoofed_res.status_code == 403
+    assert "Tenant identity mismatch" in spoofed_res.json()["detail"]
+
+    # 6. Invalid token rejection
+    bad_res = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid_non_jwt_token"})
+    assert bad_res.status_code == 401

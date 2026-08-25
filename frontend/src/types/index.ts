@@ -142,6 +142,7 @@ export interface Payment {
 export interface RazorpayConnectionStatus {
   is_connected: boolean;
   account_id?: string | null;
+  key_id?: string | null;
   merchant_name?: string | null;
   merchant_email?: string | null;
   last_synced_at?: string | null;
