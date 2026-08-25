@@ -254,6 +254,7 @@ export function App() {
             setPendingEmail(email);
             setAuthView('check-email');
           }}
+          onSuccessAdmin={handleAuthSuccess}
           onGoToLogin={() => setAuthView('login')}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}

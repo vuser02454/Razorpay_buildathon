@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ArrowRight, Lock, Mail, User, Loader2, Sun, Moon, AlertCircle } from 'lucide-react';
-import { authStore } from '../../services/authStore';
+import { ShieldCheck, ArrowRight, Lock, Mail, User, Loader2, Sun, Moon, AlertCircle, Sparkles } from 'lucide-react';
+import { authStore, AdminProfile } from '../../services/authStore';
 
 interface SignupPageProps {
   onSuccess: (email: string) => void;
+  onSuccessAdmin?: (admin: AdminProfile) => void;
   onGoToLogin: () => void;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
@@ -11,6 +12,7 @@ interface SignupPageProps {
 
 export const SignupPage: React.FC<SignupPageProps> = ({
   onSuccess,
+  onSuccessAdmin,
   onGoToLogin,
   isDarkMode = false,
   onToggleDarkMode,
@@ -20,6 +22,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -40,12 +43,37 @@ export const SignupPage: React.FC<SignupPageProps> = ({
     setError(null);
     try {
       const { needsEmailVerification } = await authStore.signup(name, email, password);
-      // Registration successful: proceed to Check Email verification screen
-      onSuccess(email);
+      if (needsEmailVerification) {
+        onSuccess(email);
+      } else {
+        const activeAdmin = authStore.getAdmin();
+        if (activeAdmin && onSuccessAdmin) {
+          onSuccessAdmin(activeAdmin);
+        } else {
+          onSuccess(email);
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please check your credentials.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDemoSignIn = async () => {
+    setDemoLoading(true);
+    setError(null);
+    try {
+      const admin = await authStore.loginDemo();
+      if (onSuccessAdmin) {
+        onSuccessAdmin(admin);
+      } else {
+        onGoToLogin();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Unable to launch demo account right now. Please try again.');
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -144,6 +172,36 @@ export const SignupPage: React.FC<SignupPageProps> = ({
               <span>{error}</span>
             </div>
           )}
+
+          {/* Quick Demo Access for Hackathon Evaluators */}
+          <div className="space-y-2">
+            <button
+              onClick={handleDemoSignIn}
+              disabled={demoLoading || loading}
+              className="w-full py-3 px-4 rounded-2xl bg-lime-400 hover:bg-lime-300 active:scale-[0.98] text-slate-950 font-black text-xs transition-all duration-200 shadow-md flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {demoLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+              ) : (
+                <Sparkles className="w-4 h-4 fill-slate-950" />
+              )}
+              <span>Continue with Demo Account</span>
+            </button>
+            <div className={`text-[10px] text-center font-mono transition-colors ${
+              isDarkMode ? 'text-slate-400' : 'text-slate-500'
+            }`}>
+              Instant access pre-loaded with live recovery queue &amp; LangGraph state
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className={`flex-1 h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
+            <span className={`text-[11px] font-mono uppercase font-bold tracking-wider ${
+              isDarkMode ? 'text-slate-500' : 'text-slate-400'
+            }`}>Or create custom admin</span>
+            <div className={`flex-1 h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
+          </div>
 
           <form onSubmit={handleSignup} className="space-y-3.5">
             <div className="space-y-1.5">
