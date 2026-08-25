@@ -1,7 +1,12 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
-from celery.utils.log import get_task_logger
+try:
+    from celery.utils.log import get_task_logger
+    logger = get_task_logger(__name__)
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
 
 from app.celery_app import celery
 from app.db.store import store, DEMO_ADMIN_ID
