@@ -331,11 +331,11 @@ export const RazorpayConnectModal: React.FC<RazorpayConnectModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fade-in"
+      className="fixed inset-0 z-50 flex items-stretch justify-stretch sm:items-center sm:justify-center bg-slate-950/85 backdrop-blur-md sm:p-4 overflow-hidden sm:overflow-y-auto animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl p-5 sm:p-8 relative text-white space-y-6 max-h-[92vh] overflow-y-auto"
+        className="w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-xl bg-slate-900 sm:bg-slate-900/95 border-none sm:border border-slate-700/80 rounded-none sm:rounded-3xl shadow-none sm:shadow-2xl p-5 sm:p-8 relative text-white space-y-5 sm:space-y-6 overflow-hidden sm:overflow-y-auto flex flex-col justify-between sm:block"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
