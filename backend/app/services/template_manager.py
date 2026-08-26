@@ -174,7 +174,7 @@ class TemplateManager:
                         merged_context[k] = str(v)
 
         # Ensure currency_symbol aligns with currency
-        if "currency" in context and "currency_symbol" not in context:
+        if context and "currency" in context and "currency_symbol" not in context:
             merged_context["currency_symbol"] = "₹" if str(context["currency"]).upper() == "INR" else "$"
 
         # Regex placeholder replacement for {{ placeholder }} or {{placeholder}}

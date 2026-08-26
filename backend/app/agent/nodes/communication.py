@@ -58,7 +58,7 @@ def communication_node(state: RecoveryState) -> Dict[str, Any]:
         )
         email_sent = send_res.get("success", False)
         message_id = send_res.get("message_id")
-        provider_name = send_res.get("provider", "brevo")
+        provider_name = send_res.get("provider", "gmail")
 
     trail = list(state.get("audit_trail", []))
     trail.append({
