@@ -25,7 +25,8 @@ const STORAGE_KEY = 'recoverai_auth_session';
  */
 export function formatAuthError(err: any): string {
   if (!err) return 'An unexpected error occurred. Please try again.';
-  const msg = (typeof err === 'string' ? err : err.message || err.error_description || '').toLowerCase();
+  const rawMsg = typeof err === 'string' ? err : err.message || err.error_description || '';
+  const msg = rawMsg.toLowerCase();
 
   if (msg.includes('invalid login credentials') || msg.includes('invalid_grant') || msg.includes('invalid credentials')) {
     return 'Email or password is incorrect.';
@@ -50,6 +51,9 @@ export function formatAuthError(err: any): string {
       return 'Supabase Auth credentials are not configured in Vercel environment. Please click "Continue with Demo Account" or add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
     }
     return 'Unable to connect to authentication server. Please check your internet connection.';
+  }
+  if (rawMsg) {
+    return `Authentication error: ${rawMsg}`;
   }
   return 'Unable to authenticate right now. Please try again.';
 }
@@ -353,11 +357,14 @@ export const authStore = {
     const cleanEmail = email.trim().toLowerCase();
     const redirectUrl = `${window.location.origin}/auth/callback?type=recovery`;
 
+    console.log('[RecoverAI] Initiating password recovery for:', cleanEmail, 'with redirect:', redirectUrl);
+
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
       redirectTo: redirectUrl,
     });
 
     if (error) {
+      console.error("Supabase password recovery error:", error);
       throw new Error(formatAuthError(error));
     }
   },
@@ -366,11 +373,13 @@ export const authStore = {
    * Update password for the currently active recovery session via Supabase Auth.
    */
   async updateUserPassword(password: string): Promise<void> {
+    console.log('[RecoverAI] Initiating password update...');
     const { error } = await supabase.auth.updateUser({
       password,
     });
 
     if (error) {
+      console.error("Supabase password update error:", error);
       throw new Error(formatAuthError(error));
     }
   },

@@ -30,6 +30,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({
       await authStore.resetPasswordForEmail(email);
       setSuccess(true);
     } catch (err: any) {
+      console.error("Supabase password recovery error:", err);
       setError(err.message || 'Unable to send password reset email.');
     } finally {
       setLoading(false);
@@ -127,7 +128,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({
                   <span className="font-bold">Recovery Link Sent</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-slate-400 font-normal">
-                  Check your inbox at <span className="font-bold text-emerald-400">{email}</span>. Click the link in the email to set a new password.
+                  If an account exists for this email, a password recovery link has been sent. Check your inbox at <span className="font-bold text-emerald-400">{email}</span>.
                 </p>
               </div>
 
@@ -150,7 +151,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({
               <div className="space-y-1.5">
                 <label className={`block text-xs font-bold font-sans ${
                   isDarkMode ? 'text-slate-300' : 'text-slate-700'
-                }`}>Admin Email</label>
+                }`}>Registered Email</label>
                 <div className="relative">
                   <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${
                     isDarkMode ? 'text-slate-500' : 'text-slate-400'

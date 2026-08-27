@@ -45,6 +45,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
         onSuccess();
       }, 2000);
     } catch (err: any) {
+      console.error("Supabase password update error:", err);
       setError(err.message || 'Unable to update password. Please request a new reset link.');
     } finally {
       setLoading(false);
