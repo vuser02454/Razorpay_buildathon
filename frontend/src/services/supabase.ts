@@ -15,10 +15,43 @@ export const isSupabaseConfigured = Boolean(
   !supabaseUrl.includes('placeholder')
 );
 
-if (!isSupabaseConfigured && typeof window !== 'undefined') {
-  console.info(
-    '[RecoverAI] Supabase Auth: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not set. Using safe fallback client.'
-  );
+function publicKeyKind(key: string): 'publishable' | 'legacy_jwt_anon' | 'missing' | 'unknown' {
+  if (!key) return 'missing';
+  if (key.startsWith('sb_publishable_')) return 'publishable';
+  if (key.startsWith('eyJ')) return 'legacy_jwt_anon';
+  return 'unknown';
+}
+
+function publicHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Production-safe Auth diagnostics. Never includes key material, JWTs, or passwords.
+ */
+export function getPublicSupabaseAuthDiagnostics() {
+  return {
+    configured: isSupabaseConfigured,
+    host: publicHost(supabaseUrl || fallbackUrl),
+    keyKind: publicKeyKind(supabaseAnonKey),
+    origin: typeof window !== 'undefined' ? window.location.origin : 'server',
+    hasLocalhostUrl: (supabaseUrl || '').includes('localhost') || (supabaseUrl || '').includes('127.0.0.1'),
+  };
+}
+
+if (typeof window !== 'undefined') {
+  if (!isSupabaseConfigured) {
+    console.info(
+      '[RecoverAI][AuthDiagnostics] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not set. Using safe fallback client.',
+      getPublicSupabaseAuthDiagnostics()
+    );
+  } else {
+    console.info('[RecoverAI][AuthDiagnostics] Supabase client initialized', getPublicSupabaseAuthDiagnostics());
+  }
 }
 
 export const supabase: SupabaseClient = createClient(

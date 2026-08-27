@@ -1,5 +1,5 @@
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, getPublicSupabaseAuthDiagnostics } from './supabase';
 import { API_BASE } from './config';
 
 export interface AdminProfile {
@@ -20,13 +20,50 @@ export interface AuthSession {
 const STORAGE_KEY = 'recoverai_auth_session';
 
 /**
- * Format any Supabase or network authentication error into a user-friendly message.
- * Strict zero exposure of internal Supabase details, tokens, or JWTs.
+ * Production-safe Auth error snapshot. Never includes tokens, JWTs, passwords, or API keys.
+ */
+export function serializeAuthError(err: any): Record<string, unknown> {
+  if (!err) return { present: false };
+  const rawMsg = typeof err === 'string' ? err : err.message || err.error_description || err.msg || '';
+  return {
+    present: true,
+    name: err.name || null,
+    status: err.status ?? err.statusCode ?? null,
+    code: err.code || err.error_code || null,
+    message: rawMsg || null,
+    error_id: err.error_id || err.__errorId || null,
+  };
+}
+
+function diagnosticAuthMessage(err: any, rawMsg: string): string {
+  const snap = serializeAuthError(err);
+  const parts = [rawMsg || 'unknown Supabase Auth error'];
+  if (snap.status) parts.push(`status=${snap.status}`);
+  if (snap.code) parts.push(`code=${snap.code}`);
+  if (snap.error_id) parts.push(`error_id=${snap.error_id}`);
+  return `Supabase Auth error: ${parts.join(' | ')}`;
+}
+
+/**
+ * Format any Supabase or network authentication error into a user-facing message.
+ * During diagnosis, confirmation/mailer failures keep the exact Supabase error text.
+ * Strict zero exposure of tokens, JWTs, or secrets.
  */
 export function formatAuthError(err: any): string {
   if (!err) return 'An unexpected error occurred. Please try again.';
-  const rawMsg = typeof err === 'string' ? err : err.message || err.error_description || '';
+  const rawMsg = typeof err === 'string' ? err : err.message || err.error_description || err.msg || '';
   const msg = rawMsg.toLowerCase();
+  const code = String(err.code || err.error_code || '').toLowerCase();
+
+  // Do not replace mailer / confirmation failures with a generic OTP message.
+  if (
+    msg.includes('confirmation email') ||
+    msg.includes('error sending') ||
+    code === 'unexpected_failure' ||
+    code === 'over_email_send_rate_limit'
+  ) {
+    return diagnosticAuthMessage(err, rawMsg);
+  }
 
   if (msg.includes('invalid login credentials') || msg.includes('invalid_grant') || msg.includes('invalid credentials')) {
     return 'Email or password is incorrect.';
@@ -43,7 +80,7 @@ export function formatAuthError(err: any): string {
   if (msg.includes('at least 6 characters') || msg.includes('weak_password')) {
     return 'Password must be at least 6 characters.';
   }
-  if (msg.includes('rate limit') || msg.includes('over_email_send_rate_limit')) {
+  if (msg.includes('rate limit')) {
     return 'Too many attempts. Please wait a moment and try again.';
   }
   if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed')) {
@@ -53,7 +90,7 @@ export function formatAuthError(err: any): string {
     return 'Unable to connect to authentication server. Please check your internet connection.';
   }
   if (rawMsg) {
-    return `Authentication error: ${rawMsg}`;
+    return diagnosticAuthMessage(err, rawMsg);
   }
   return 'Unable to authenticate right now. Please try again.';
 }
@@ -225,6 +262,13 @@ export const authStore = {
     }
 
     const redirectUrl = `${window.location.origin}/auth/callback`;
+    const diagnostics = getPublicSupabaseAuthDiagnostics();
+
+    console.info('[RecoverAI][AuthDiagnostics] signUp start', {
+      ...diagnostics,
+      emailRedirectTo: redirectUrl,
+      emailDomain: cleanEmail.includes('@') ? cleanEmail.split('@')[1] : null,
+    });
 
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
@@ -238,12 +282,26 @@ export const authStore = {
     });
 
     if (error) {
+      console.error('[RecoverAI][AuthDiagnostics] signUp failed', {
+        ...diagnostics,
+        emailRedirectTo: redirectUrl,
+        supabase: serializeAuthError(error),
+      });
       throw new Error(formatAuthError(error));
     }
 
     const isConfirmed = Boolean(
       data.user?.email_confirmed_at || (data.user as any)?.confirmed_at
     );
+    const identitiesCount = Array.isArray(data.user?.identities) ? data.user!.identities.length : null;
+
+    console.info('[RecoverAI][AuthDiagnostics] signUp succeeded', {
+      ...diagnostics,
+      userCreated: Boolean(data.user?.id),
+      identitiesCount,
+      emailConfirmed: isConfirmed,
+      hasSession: Boolean(data.session),
+    });
 
     // If confirmation is required (default standard behavior), user must check their email
     return {
@@ -400,6 +458,11 @@ export const authStore = {
     });
 
     if (error) {
+      console.error('[RecoverAI][AuthDiagnostics] resend signup email failed', {
+        ...getPublicSupabaseAuthDiagnostics(),
+        emailRedirectTo: redirectUrl,
+        supabase: serializeAuthError(error),
+      });
       throw new Error(formatAuthError(error));
     }
   },
