@@ -46,7 +46,7 @@ export function formatAuthError(err: any): string {
   if (msg.includes('rate limit') || msg.includes('over_email_send_rate_limit')) {
     return 'Too many attempts. Please wait a moment and try again.';
   }
-  if (msg.includes('network') || msg.includes('failed to fetch')) {
+  if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed')) {
     if (!isSupabaseConfigured) {
       return 'Supabase Auth credentials are not configured in Vercel environment. Please click "Continue with Demo Account" or add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
     }
