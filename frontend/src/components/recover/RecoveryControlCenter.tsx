@@ -214,8 +214,8 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
         customer_id: 'cust_test_01',
         customer: {
           id: 'cust_test_01',
-          name: currentAdmin?.name || 'Priya Sharma',
-          email: currentAdmin?.email || 'priya@techcorp.in',
+          name: 'Priya Venkatesh',
+          email: 'priya.test@gmail.com',
           country: 'IN',
           segment: 'pro',
           lifetime_value: 28500,

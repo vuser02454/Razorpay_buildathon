@@ -97,7 +97,7 @@ export const DunningTimelineSection: React.FC = () => {
           <div className="lg:col-span-7 bg-slate-900 rounded-2xl border border-slate-800 p-5 space-y-3 font-sans">
             {selectedChannel === 'email' && (
               <div className="space-y-2 text-xs">
-                <div className="text-[10px] text-slate-400 font-mono">FROM: billing@yourcompany.com &bull; TO: rahul.sharma@techinnovate.in</div>
+                <div className="text-[10px] text-slate-400 font-mono">FROM: billing@yourcompany.com &bull; TO: rahul.test@gmail.com</div>
                 <div className="font-bold text-sm text-white">Update your payment method to keep your subscription active</div>
                 <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-300 space-y-2 leading-relaxed">
                   <p>Hi Rahul,</p>

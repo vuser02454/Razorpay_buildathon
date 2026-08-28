@@ -81,7 +81,7 @@ class DataStore:
             admin_id=DEMO_ADMIN_ID,
             payment_id=first_pid,
             customer_name="Rahul Sharma",
-            customer_email="rahul.sharma@example.in",
+            customer_email="rahul.test@gmail.com",
             channel="email",
             email_type=EmailType.PAYMENT_UPDATE_REQUIRED,
             subject="Payment update required for your ₹2,000 subscription",
@@ -396,7 +396,7 @@ class DataStore:
             {
                 "id": f"pay_rzp_live_{uuid.uuid4().hex[:8]}",
                 "customer_name": "Vikram Sethi",
-                "customer_email": "vikram.sethi@enterprise.in",
+                "customer_email": "vikram.test@gmail.com",
                 "amount": 4500.0,
                 "currency": "INR",
                 "failure_code": "insufficient_funds",
@@ -406,7 +406,7 @@ class DataStore:
             {
                 "id": f"pay_rzp_live_{uuid.uuid4().hex[:8]}",
                 "customer_name": "Rohan Deshmukh",
-                "customer_email": "rohan.d@fintech.co",
+                "customer_email": "rohan.test@gmail.com",
                 "amount": 12000.0,
                 "currency": "INR",
                 "failure_code": "bank_timeout",
