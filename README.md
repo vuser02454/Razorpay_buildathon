@@ -6,7 +6,7 @@
 > **Live Web Application:** [https://razorpay-buildathon-ivory.vercel.app](https://razorpay-buildathon-ivory.vercel.app)  
 > **Live Backend API (Render):** [https://razorpay-buildathon-rvgj.onrender.com](https://razorpay-buildathon-rvgj.onrender.com)  
 > **Target Demo Artifact:** [https://share.google/IhXXtpGBbnNE8J5DV](https://share.google/IhXXtpGBbnNE8J5DV)  
-> **Tech Stack:** React 19 • TypeScript • Tailwind CSS v4 • FastAPI • LangGraph StateGraph • Celery + Redis • Supabase Auth & PostgreSQL • Razorpay API & Mock Sandbox • Gmail SMTP & HTTPS REST Relay • Google Gemini • Groq LPU • OpenRouter  
+> **Tech Stack:** React 19 • TypeScript • Tailwind CSS v4 • FastAPI • XGBoost • SHAP • LangGraph StateGraph • Celery + Redis • Supabase Auth & PostgreSQL • Razorpay API & Mock Sandbox • Gmail SMTP & HTTPS REST Relay • Google Gemini • Groq LPU • OpenRouter  
 
 ---
 
@@ -22,11 +22,12 @@ Traditional dunning tools execute naive recovery routines:
 ### The Solution: RecoverAI
 **RecoverAI** replaces naive dunning with an **autonomous LangGraph-orchestrated state machine** that:
 1. **Triages Failure Codes** into deterministic risk archetypes (*Soft Decline, Insufficient Funds, Expired Card, Network Timeout, Stolen/Hard Decline*).
-2. **Evaluates Recovery Probability** via a calibrated multi-factor scoring model ($0.00 - 1.00$) factoring tenure, transaction history, decline count, and bank health.
-3. **Enforces Hard Policy Invariants** (e.g., automatic lockout for stolen cards, mandatory operator review for amounts $>₹10,000$, forced customer dunning for expired credentials).
-4. **Schedules Retries to Banking Liquidity Cycles** (e.g., salary days, morning clearing windows at 09:30 AM / 02:00 PM).
-5. **Dispatches Empathetic Communications** via **Gmail SMTP & HTTPS REST Relay** (Port 587 STARTTLS / Port 443 HTTPS) with **cryptographically secure 1-click payment update links**.
-6. **Dynamically Binds Recipient Addresses** to verified customer records (`payment.customer.email`) with zero administrative/demo fallback leakage.
+2. **Evaluates Recovery Probability** via a trained **XGBoost Classifier (`xgboost_v1`)** with **Platt Scaling (Sigmoid Calibration)** across 11 point-in-time features.
+3. **Explains Predictions Mathematically** via **SHAP TreeExplainer**, exposing exact feature-level positive and negative attributions without guesswork.
+4. **Enforces Hard Policy Invariants** (e.g., automatic lockout for stolen cards, mandatory operator review for amounts $>₹10,000$, forced customer dunning for expired credentials).
+5. **Schedules Retries to Banking Liquidity Cycles** (e.g., salary days, morning clearing windows at 09:30 AM / 02:00 PM).
+6. **Dispatches Empathetic Communications** via **Gmail SMTP & HTTPS REST Relay** (Port 587 STARTTLS / Port 443 HTTPS) with **cryptographically secure 1-click payment update links**.
+7. **Dynamically Binds Recipient Addresses** to verified customer records (`payment.customer.email`) with zero administrative/demo fallback leakage.
 
 ---
 
@@ -95,7 +96,29 @@ Customer Inbox
 
 ---
 
-## 🔄 4. LangGraph Autonomous Recovery State Machine
+## 🧠 4. Core Autonomous ML & Decision Pipeline
+
+```
+Payment Failure
+      ↓
+Feature Engineering (11 Point-in-Time Features)
+      ↓
+Trained XGBoost Model (xgboost_v1)
+      ↓
+Calibrated Recovery Probability (Platt Sigmoid)
+      ↓
+SHAP TreeExplainer Attribution
+      ↓
+Deterministic Policy Safety Gate
+      ↓
+Final Recovery Decision (RETRY / CUSTOMER_ACTION / HUMAN_REVIEW / STOP)
+```
+
+> **Critical Safety Invariant**: **SHAP and XGBoost are explanatory and probabilistic layers**. The **deterministic policy safety gate remains authoritative** and cannot be overridden by ML probabilities or SHAP attributions.
+
+---
+
+## 🔄 5. LangGraph Autonomous Recovery State Machine
 
 LangGraph is the **central deterministic state-machine workflow orchestrator** for RecoverAI. It executes a typed 7-node pipeline with deterministic safety policy gates:
 
@@ -108,7 +131,7 @@ Payment Failure / Razorpay Webhook
                 ↓
   01. CLASSIFY FAILURE (classify_failure_node)
                 ↓
-  02. RECOVERY PROBABILITY (recovery_probability_node)
+  02. XGBOOST RECOVERY PROBABILITY & SHAP (recovery_probability_node)
                 ↓
   03. POLICY SAFETY GATE (policy_gate_node) [DETERMINISTIC INVARIANTS]
                 ↓
@@ -143,11 +166,34 @@ Razorpay   Gmail / HTTPS Relay         Admin Review   Safety Lock
 6. **`communication_node`**: Generates failure-specific copy via Google Gemini and dispatches secure 1-click update emails.
 7. **`outcome_node`**: Updates payment status (`RECOVERED`, `ACTION_REQUIRED`, `RETRY_SCHEDULED`, `FAILED`), emits telemetry, and writes immutable audit trail logs.
 
-> **XAI Invariant**: XGBoost estimates the probability that a failed payment can be recovered. SHAP provides local feature-level explanations for the model prediction. Deterministic safety policies remain authoritative and can override the model.
+---
+
+## 📊 6. Trained XGBoost Model & SHAP Explainer Performance
+
+RecoverAI features a dedicated, reproducible machine learning training pipeline in [`backend/ml/train_recovery_model.py`](backend/ml/train_recovery_model.py).
+
+### Dataset & Evaluation Metrics (Holdout Test Set)
+
+| Metric | Measured Value | Meaning & Context |
+| :--- | :---: | :--- |
+| **Model Version** | **`xgboost_v1`** | Versioned artifact with metadata tracking. |
+| **Algorithm** | **XGBoost + Platt Scaling** | Binary logistic regression booster with Platt sigmoid calibration. |
+| **Dataset Size** | **1,200 Records** | 70% Train (840) / 15% Validation (180) / 15% Holdout Test (180). |
+| **Class Balance** | **56.0% Recovered / 44.0% Failed** | Balanced empirical recovery distribution. |
+| **ROC-AUC** | **`0.7300`** | Robust discriminatory ability on unseen test data. |
+| **PR-AUC (Avg Precision)** | **`0.7175`** | Strong recovery recall without excessive false positives. |
+| **Brier Score** | **`0.2054`** | High probability precision and low mean squared error. |
+| **Expected Calibration Error (ECE)** | **`0.0547`** | Predicted probabilities closely track actual empirical outcomes. |
+| **Accuracy** | **`66.67%`** | Reliable threshold classification at 0.50 cutoff. |
+| **Recall** | **`83.84%`** | Successfully flags $>83\%$ of recoverable payment declines. |
+| **F1 Score** | **`0.7345`** | Harmonic balance between precision and recovery capture. |
+| **Explainer** | **`shap.TreeExplainer`** | Exact closed-form polynomial Shapley additive attributions. |
+
+> **Honest XAI Disclosure on LIME**: LIME is **not** used in production. `XGBoost + SHAP TreeExplainer` is the sole production explainability pipeline due to exact Shapley additive guarantees for gradient boosting models.
 
 ---
 
-## 🎛️ 5. Provider Topology & Architecture Matrix
+## 🎛️ 7. Provider Topology & Architecture Matrix
 
 ```
                         FASTAPI GATEWAY
@@ -174,7 +220,8 @@ Razorpay   Gmail / HTTPS Relay         Admin Review   Safety Lock
 
 | Provider / Layer | Service Implementation | Dedicated Responsibility |
 |---|---|---|
-| **Google Gemini** | [`gemini_service.py`](backend/app/services/gemini_service.py) | **Primary Intelligence Engine**: Contextual failure triage, recovery probability scoring, empathetic dunning copy generation, analytics interpretation, and policy decision explanations. |
+| **Google Gemini** | [`gemini_service.py`](backend/app/services/gemini_service.py) | **Primary Intelligence Engine**: Contextual failure triage, empathetic dunning copy generation, analytics interpretation, and policy decision explanations. |
+| **XGBoost + SHAP** | [`shap_service.py`](backend/app/services/shap_service.py) | **Predictive & Explainable AI**: Calibrated recovery probability modeling (`xgboost_v1`) and feature-level mathematical Shapley attribution. |
 | **Groq LPU** | [`groq_service.py`](backend/app/services/grok_service.py) | **Real-Time Conversational AI Copilot**: Powers the floating AI Assistant with sub-second response times and live database tool execution (`get_recovery_metrics`, `get_payment_detail`, `get_recovery_queue`, `get_policy_decision`). |
 | **OpenRouter** | [`openrouter_service.py`](backend/app/services/openrouter_service.py) | **Secondary Fallback & Multi-Model Reasoning**: Automatic fallback if primary AI is unavailable. |
 | **LangGraph** | [`graph.py`](backend/app/agent/graph.py) | **Autonomous Workflow Orchestration**: 7-node deterministic recovery state machine with policy safety gates. |
@@ -187,7 +234,7 @@ Razorpay   Gmail / HTTPS Relay         Admin Review   Safety Lock
 
 ---
 
-## 🚀 6. Quick Start & Setup Guide
+## 🚀 8. Quick Start & Setup Guide
 
 ### 1. Prerequisites
 - **Node.js**: v18+ (v20+ recommended)
@@ -199,6 +246,9 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+# (Optional) Re-train and calibrate the XGBoost model
+python3 ml/train_recovery_model.py
 
 # Start FastAPI server on port 8000
 PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -256,14 +306,14 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 source backend/venv/bin/activate
 pytest backend/tests/
 ```
-*(All 61 automated test cases pass with 100% green status across state graph, email delivery, Celery/Redis automation, and Razorpay flows)*
+*(All 62 automated test cases pass with 100% green status across state graph, XGBoost/SHAP ML, email delivery, Celery/Redis automation, and Razorpay flows)*
 
 ---
 
-## 🧪 7. Automated Test Suite Matrix
+## 🧪 9. Automated Test Suite Matrix
 
 ```
-======================== 61 passed, 1 warning in 47.96s ========================
+======================== 62 passed, 6 warnings in 73.48s ========================
 ```
 
 | Test Suite | File | Verified Features |
@@ -272,11 +322,11 @@ pytest backend/tests/
 | **Celery & Redis Automation** | `test_celery_redis_automation.py` (16 tests) | Background task registration, scheduled retry idempotency, async dunning dispatch, Celery task payload sanitization. |
 | **Email System & Delivery** | `test_email_system.py` (16 tests) | Dynamic customer email resolution, responsive HTML template generation, HTTPS relay fallback, diagnostic logging. |
 | **Razorpay Integration & OTP** | `test_razorpay_verification.py` (10 tests) | Multi-tenant onboarding OTP delivery, webhook HMAC signature validation, masked credential display. |
-| **Explainable AI (SHAP & LIME)** | `test_shap_xai.py` (9 tests) | Multi-factor feature importance, SHAP score explanations, confidence intervals, audit logging. |
+| **XGBoost & SHAP Explainability** | `test_shap_xai.py` (10 tests) | Calibrated XGBoost inference, TreeExplainer feature attributions, feature perturbation sensitivity, safety gate non-overridability. |
 
 ---
 
-## 🔒 8. Security & PCI-DSS Compliance Invariants
+## 🔒 10. Security & PCI-DSS Compliance Invariants
 
 1. **Zero Raw Card Storage**: No raw PAN, CVV, or cardholder credentials are ever stored (tokenized identifiers only).
 2. **Hard Deterministic Safety Gates**: Stolen/lost cards and expired credentials cannot be retried under any circumstance.
@@ -286,7 +336,7 @@ pytest backend/tests/
 
 ---
 
-## 📄 9. License
+## 📄 11. License
 
 Developed for the **Razorpay AI Builder Internship 2026** (Track 3 — AI Revenue Recovery).  
 Licensed under the **MIT License**.
