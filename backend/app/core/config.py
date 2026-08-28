@@ -27,7 +27,17 @@ class Settings(BaseModel):
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "mock_secret_84920")
     RAZORPAY_WEBHOOK_SECRET: str = os.getenv("RAZORPAY_WEBHOOK_SECRET", "mock_webhook_secret")
     
-    # Gmail SMTP Configuration (Transactional Business Emails Only)
+    # EmailJS Configuration (Primary Transactional Provider)
+    EMAILJS_SERVICE_ID: str = os.getenv("EMAILJS_SERVICE_ID", "")
+    EMAILJS_TEMPLATE_ID: str = os.getenv("EMAILJS_TEMPLATE_ID", "")
+    EMAILJS_TEMPLATE_PAYMENT_FAILED_ID: str = os.getenv("EMAILJS_TEMPLATE_PAYMENT_FAILED_ID", "")
+    EMAILJS_TEMPLATE_RECOVERY_SUCCESS_ID: str = os.getenv("EMAILJS_TEMPLATE_RECOVERY_SUCCESS_ID", "")
+    EMAILJS_TEMPLATE_ACTION_REQUIRED_ID: str = os.getenv("EMAILJS_TEMPLATE_ACTION_REQUIRED_ID", "")
+    EMAILJS_TEMPLATE_ADMIN_NOTICE_ID: str = os.getenv("EMAILJS_TEMPLATE_ADMIN_NOTICE_ID", "")
+    EMAILJS_PUBLIC_KEY: str = os.getenv("EMAILJS_PUBLIC_KEY", "")
+    EMAILJS_PRIVATE_KEY: str = os.getenv("EMAILJS_PRIVATE_KEY", "")
+    
+    # Gmail SMTP Configuration (Fallback Transactional Business Emails Only)
     GMAIL_SMTP_HOST: str = os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com")
     GMAIL_SMTP_PORT: int = int(os.getenv("GMAIL_SMTP_PORT", "587"))
     GMAIL_SMTP_USER: str = os.getenv("GMAIL_SMTP_USER", "")

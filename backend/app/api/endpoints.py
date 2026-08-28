@@ -68,10 +68,12 @@ def health_celery():
 def health_redis():
     return AIRouter.get_provider_health("redis")
 
+@router.get("/health/emailjs")
 @router.get("/health/gmail")
 @router.get("/health/brevo")
-def health_gmail():
-    return AIRouter.get_provider_health("gmail")
+@router.get("/health/resend")
+def health_email():
+    return AIRouter.get_provider_health("emailjs")
 
 @router.get("/health/razorpay")
 def health_razorpay():

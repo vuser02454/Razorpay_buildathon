@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sliders, Save, Loader2, CheckCircle2, Shield, CreditCard, RefreshCw, Unlink, Link as LinkIcon } from 'lucide-react';
+import { Sliders, Save, Loader2, CheckCircle2, Shield, CreditCard, RefreshCw, Unlink, Link as LinkIcon, Mail, Send, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { MerchantPolicy, RazorpayConnectionStatus } from '../types';
 import { AIStatusPanel } from './AIStatusPanel';
@@ -16,6 +16,34 @@ export const SettingsView: React.FC = () => {
   const [testResultMsg, setTestResultMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // EmailJS Test Email State
+  const [testEmailAddress, setTestEmailAddress] = useState('operator@recoverai.ai');
+  const [emailSendingStatus, setEmailSendingStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [emailFeedbackMsg, setEmailFeedbackMsg] = useState<string | null>(null);
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress || !testEmailAddress.includes('@')) {
+      setEmailSendingStatus('error');
+      setEmailFeedbackMsg('Email could not be sent: Please enter a valid email address.');
+      return;
+    }
+    setEmailSendingStatus('sending');
+    setEmailFeedbackMsg('Sending...');
+    try {
+      const res = await api.sendTestEmail(testEmailAddress);
+      if (res.success) {
+        setEmailSendingStatus('success');
+        setEmailFeedbackMsg('Email sent successfully');
+      } else {
+        setEmailSendingStatus('error');
+        setEmailFeedbackMsg('Email could not be sent');
+      }
+    } catch (err: any) {
+      setEmailSendingStatus('error');
+      setEmailFeedbackMsg('Email could not be sent');
+    }
+  };
 
   useEffect(() => {
     api.getSettings().then((res) => { setPolicy(res.policy); setIsDemoMode(res.is_demo_mode); }).catch(console.error);
@@ -195,6 +223,62 @@ export const SettingsView: React.FC = () => {
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
         {saving ? 'Saving...' : saved ? 'Saved Successfully' : 'Save Recovery Policies'}
       </button>
+
+      {/* Transactional Email Testing Panel */}
+      <div className="p-5 glass-panel rounded-2xl border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-600/10 text-purple-400 flex items-center justify-center font-bold">
+              <Mail className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-extrabold text-white font-display uppercase tracking-tight">
+                Transactional Email (Gmail SMTP Relay)
+              </h4>
+              <p className="text-[10px] text-slate-400">
+                Send diagnostic test notification to verify transactional email delivery via Gmail SMTP
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="email"
+            value={testEmailAddress}
+            onChange={(e) => setTestEmailAddress(e.target.value)}
+            placeholder="operator@company.com"
+            className="flex-1 px-3 py-2 text-xs bg-slate-950/60 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-mono"
+          />
+          <button
+            onClick={handleSendTestEmail}
+            disabled={emailSendingStatus === 'sending'}
+            className="px-4 py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-xl shadow-lg shadow-purple-600/25 transition cursor-pointer disabled:opacity-50"
+          >
+            {emailSendingStatus === 'sending' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Send className="w-3.5 h-3.5" />
+            )}
+            <span>{emailSendingStatus === 'sending' ? 'Sending...' : 'Send Test Email'}</span>
+          </button>
+        </div>
+
+        {emailFeedbackMsg && (
+          <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+            emailSendingStatus === 'success'
+              ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/60'
+              : emailSendingStatus === 'error'
+              ? 'bg-rose-950/40 text-rose-300 border border-rose-800/60'
+              : 'bg-slate-900/60 text-slate-300 border border-slate-800'
+          }`}>
+            {emailSendingStatus === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+            {emailSendingStatus === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+            {emailSendingStatus === 'sending' && <Loader2 className="w-4 h-4 text-purple-400 animate-spin shrink-0" />}
+            <span className="font-medium">{emailFeedbackMsg}</span>
+          </div>
+        )}
+      </div>
 
       {/* Security Notice */}
       <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">

@@ -118,7 +118,7 @@ async def send_recovery_email_endpoint(
         update_link=update_link
     )
 
-    # Centralized Gmail SMTP dispatch
+    # Dispatch transactional recovery email via EmailJS / central EmailService
     result = EmailService.send_recovery_email(
         to_email=customer_email,
         customer_name=customer_name,
@@ -147,7 +147,7 @@ async def send_recovery_email_endpoint(
         return EmailSendResponse(
             success=False,
             message=result.get("error", "We couldn't send your email right now. Please try again."),
-            provider="gmail",
+            provider=result.get("provider", "gmail"),
             communication=comm
         )
 
@@ -165,17 +165,18 @@ async def test_email_endpoint(payload: TestEmailRequest):
     Diagnostic endpoint to test Gmail SMTP delivery.
     """
     result = EmailService.send_test_email(payload.to_email)
+    prov = result.get("provider", "gmail")
     if not result.get("success"):
         return TestEmailResponse(
             success=False,
-            provider="gmail",
+            provider=prov,
             message=result.get("error", "Gmail SMTP delivery failed. Please check credentials."),
             provider_message_id=None
         )
     return TestEmailResponse(
         success=True,
-        provider=result.get("provider", "gmail"),
-        message=f"Test email successfully dispatched to {payload.to_email} via Gmail SMTP.",
+        provider=prov,
+        message=f"Test transactional email successfully dispatched to {payload.to_email} via {prov}.",
         provider_message_id=result.get("message_id")
     )
 

@@ -55,7 +55,9 @@ export const AIStatusPanel: React.FC = () => {
       case 'redis': return Layers;
       case 'gmail':
       case 'smtp':
-      case 'brevo': return Mail;
+      case 'brevo':
+      case 'resend':
+      case 'emailjs': return Mail;
       case 'razorpay': return CreditCard;
       case 'supabase': return Database;
       default: return Cpu;

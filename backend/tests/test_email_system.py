@@ -242,7 +242,7 @@ def test_send_human_review_notification_flow():
     Verify send_human_review_notification executes and returns structured response.
     """
     res = EmailService.send_human_review_notification(
-        to_email="enterprise@corp.in",
+        to_email="enterprise@example.com",
         customer_name="Enterprise Admin",
         amount=25000.0,
         currency="INR",
@@ -278,6 +278,60 @@ def test_send_test_email_diagnostic():
     res = EmailService.send_test_email("admin@recoverai.ai")
     assert res["success"] is True
     assert res["email_type"] == EmailType.TEST_EMAIL.value
+    assert "emailjs" in res["provider"].lower()
+
+
+def test_emailjs_provider_direct_dispatch():
+    """
+    Verify EmailJSProvider produces structured response and safely handles sandbox simulation.
+    """
+    from app.services.emailjs_provider import EmailJSProvider
+    res = EmailJSProvider.send_transactional(
+        to_email="customer@example.com",
+        subject="Payment Failed — Action Required",
+        template_params={
+            "customer_name": "Deepak Patel",
+            "amount": 1999.0,
+            "currency": "INR",
+            "payment_id": "pay_test_emailjs_01",
+            "failure_reason": "Insufficient funds"
+        },
+        email_type=EmailType.PAYMENT_FAILED
+    )
+    assert res["success"] is True
+    assert res["recipient"] == "customer@example.com"
+    assert res["message_id"] is not None
+    assert "emailjs" in res["provider"].lower()
+
+
+def test_emailjs_failure_diagnostics_isolation():
+    """
+    Simulate an EmailJS network/API error and confirm that the user-facing
+    error is generic and customer-safe, while technical error is isolated in diagnostic_error.
+    """
+    from unittest.mock import MagicMock
+    from app.services.emailjs_provider import EmailJSProvider
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 400
+    mock_resp.text = "The user_id param is required"
+
+    with patch("httpx.Client.post", return_value=mock_resp):
+        with patch.dict("os.environ", {
+            "EMAILJS_SERVICE_ID": "service_mock",
+            "EMAILJS_TEMPLATE_ID": "template_mock",
+            "EMAILJS_PUBLIC_KEY": "public_mock"
+        }):
+            res = EmailJSProvider.send_transactional(
+                to_email="user@example.com",
+                subject="Test Failure",
+                template_params={"customer_name": "Test"},
+                email_type=EmailType.RECOVERY_ACTION_REQUIRED
+            )
+            assert res["success"] is False
+            assert res["error"] == "We couldn't send your email right now. Please try again."
+            assert "diagnostic_error" in res
+            assert "400" in res["diagnostic_error"]
 
 
 def test_supabase_communication_audit_logging():
@@ -290,7 +344,7 @@ def test_supabase_communication_audit_logging():
         customer_name="Audit Customer",
         customer_email="audit@example.in",
         subject="Audit Test Email",
-        provider="gmail",
+        provider="emailjs",
         provider_message_id="msg_audit_123",
         status="SENT",
         email_type=EmailType.RECOVERY_ACTION_REQUIRED

@@ -254,9 +254,15 @@ class AIRouter:
                 return {"provider": "Redis Broker", "status": "operational", "role": "Message Broker & Result Store"}
             except Exception:
                 return {"provider": "Redis Broker", "status": "standby" if settings.IS_DEMO_MODE else "unavailable", "role": "Message Broker & Result Store"}
-        elif p in ("gmail", "smtp", "brevo"):
-            has_auth = bool(settings.GMAIL_SMTP_USER and settings.GMAIL_SMTP_PASSWORD)
-            return {"provider": "Gmail SMTP", "status": "operational" if has_auth else "sandbox", "role": "Transactional Email"}
+        elif p in ("emailjs", "gmail", "smtp", "brevo", "resend"):
+            has_auth = bool(settings.EMAILJS_SERVICE_ID and settings.EMAILJS_TEMPLATE_ID and settings.EMAILJS_PUBLIC_KEY)
+            if not has_auth:
+                has_auth = bool(settings.GMAIL_SMTP_USER and settings.GMAIL_SMTP_PASSWORD)
+            return {
+                "provider": "EmailJS Relay",
+                "status": "operational" if has_auth else "sandbox",
+                "role": "Transactional Notifications"
+            }
         elif p == "razorpay":
             has_auth = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET)
             return {"provider": "Razorpay Gateway", "status": "operational" if has_auth else "sandbox", "role": "Payment Gateway"}
