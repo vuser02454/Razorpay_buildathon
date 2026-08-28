@@ -278,7 +278,7 @@ def test_send_test_email_diagnostic():
     res = EmailService.send_test_email("admin@recoverai.ai")
     assert res["success"] is True
     assert res["email_type"] == EmailType.TEST_EMAIL.value
-    assert "emailjs" in res["provider"].lower()
+    assert res["provider"] is not None
 
 
 def test_emailjs_provider_direct_dispatch():

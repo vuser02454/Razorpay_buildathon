@@ -118,14 +118,16 @@ class AssistantRouter:
 
         # 5. Transactional Email Dispatch Tool
         if any(w in msg_lower for w in ["email", "mail", "send", "dunning", "notify", "receipt"]):
-            # Extract email if mentioned in user prompt
+            # Extract email if explicitly mentioned in user prompt
             email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', user_message)
             to_email = email_match.group(0) if email_match else None
 
+            # Customer transactional recipient strictly from target payment customer record
             if not to_email and target_payment and target_payment.customer and target_payment.customer.email:
                 to_email = target_payment.customer.email
 
-            if not to_email:
+            # Admin email is ONLY used if user explicitly asked for admin notification
+            if not to_email and any(w in msg_lower for w in ["admin", "merchant", "alert me", "notify me", "my email"]):
                 admin_obj = store.get_admin_by_id(admin_id)
                 if admin_obj and admin_obj.email:
                     to_email = admin_obj.email

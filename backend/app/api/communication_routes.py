@@ -83,10 +83,19 @@ async def send_recovery_email_endpoint(
     if not policy.dunning_enabled:
         raise HTTPException(status_code=400, detail="Merchant policy currently has automated email communications disabled.")
 
-    customer_name = payload.customer_name or (payment.customer.name if payment.customer else "Valued Customer")
-    customer_email = payload.customer_email or (payment.customer.email if payment.customer else None)
-    if not customer_email:
-        raise HTTPException(status_code=400, detail="Customer email address is required to dispatch recovery notification.")
+    # Secure recipient resolution: Extract directly from verified payment record
+    cust_record = payment.customer
+    customer_name = (cust_record.name if cust_record and cust_record.name else None) or payload.customer_name or "Valued Customer"
+    customer_email = (cust_record.email if cust_record and cust_record.email else None) or payload.customer_email
+
+    if not customer_email or not customer_email.strip() or "@" not in customer_email:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No customer email found for payment {payment.id}. Recipient must be a valid customer email address."
+        )
+
+    recipient_domain = customer_email.split("@")[-1] if "@" in customer_email else "unknown"
+    print(f"[EmailService] [Logging] event=transactional_email payment_id={payment.id} customer_id={cust_record.id if cust_record else 'unknown'} recipient_source=customer.email recipient_domain={recipient_domain}")
 
     failure_type = payment.failure.failure_type.value if payment.failure else "credential_issue"
     failure_reason = payment.failure.decline_reason if payment.failure else "Saved card expired or requires bank update"

@@ -326,22 +326,33 @@ export const RecoveryControlCenter: React.FC<RecoveryControlCenterProps> = ({ on
 
   const handleQuickSendEmail = async () => {
     if (!selectedPayment) return;
+    const custEmail = selectedPayment.customer?.email;
+    if (!custEmail) {
+      setEmailNotification(`⚠️ No customer email found for payment ${selectedPayment.id}`);
+      setTimeout(() => setEmailNotification(null), 5000);
+      return;
+    }
     setQuickSendingEmail(true);
     try {
       const res = await api.sendEmail(
         selectedPayment.id,
-        selectedPayment.customer?.email,
+        custEmail,
         selectedPayment.customer?.name,
         'PAYMENT_UPDATE_REQUIRED'
       );
       if (res.success) {
-        setEmailNotification(`✓ Recovery email sent to ${selectedPayment.customer?.email} via Gmail SMTP`);
+        setEmailNotification(`✓ Recovery email sent to ${custEmail}`);
         const commsRes = await api.getEmailHistory();
         setCommunications(commsRes);
         setTimeout(() => setEmailNotification(null), 5000);
+      } else {
+        setEmailNotification(`⚠️ Email issue: ${res.message}`);
+        setTimeout(() => setEmailNotification(null), 5000);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setEmailNotification(`⚠️ Error: ${e.message || 'Failed to dispatch email'}`);
+      setTimeout(() => setEmailNotification(null), 5000);
     } finally {
       setQuickSendingEmail(false);
     }

@@ -186,18 +186,6 @@ class EmailService:
                     except Exception:
                         pass
                     print(f"[EmailService] [Logging] event=https_api_error status_code={resp.status_code} detail={err_detail}")
-                    return {
-                        "success": False,
-                        "email_type": type_str,
-                        "recipient": to_email,
-                        "message_id": None,
-                        "provider": "brevo",
-                        "timestamp": now_str,
-                        "status": "FAILED",
-                        "mode": "live",
-                        "error": f"Email relay error: {err_detail}",
-                        "diagnostic_error": f"Brevo HTTP {resp.status_code}: {err_detail}"
-                    }
             except Exception as http_err:
                 print(f"[EmailService] [Logging] event=https_api_exception error={str(http_err)}")
 
@@ -254,6 +242,20 @@ class EmailService:
                 }
             except smtplib.SMTPAuthenticationError as auth_err:
                 print(f"[EmailService] [Logging] event=smtp_auth_error type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false error_code=AUTH_FAILED diagnostic={str(auth_err)}")
+                if os.getenv("IS_DEMO_MODE", "false").lower() == "true":
+                    mock_id = f"demo_msg_{uuid.uuid4().hex[:12]}"
+                    return {
+                        "success": True,
+                        "email_type": type_str,
+                        "recipient": to_email,
+                        "message_id": mock_id,
+                        "provider": "gmail (demo)",
+                        "timestamp": now_str,
+                        "status": "SENT",
+                        "mode": "simulated",
+                        "error": None,
+                        "diagnostic_error": None
+                    }
                 return {
                     "success": False,
                     "email_type": type_str,
@@ -371,6 +373,23 @@ class EmailService:
                     }
             except Exception:
                 pass
+
+        # 5. Isolated Demo Mode simulation (only when IS_DEMO_MODE is true)
+        if os.getenv("IS_DEMO_MODE", "false").lower() == "true":
+            mock_id = f"demo_msg_{uuid.uuid4().hex[:12]}"
+            print(f"[EmailService] [Logging] event=demo_simulation type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} status=SENT msg_id={mock_id}")
+            return {
+                "success": True,
+                "email_type": type_str,
+                "recipient": to_email,
+                "message_id": mock_id,
+                "provider": "gmail (demo)",
+                "timestamp": now_str,
+                "status": "SENT",
+                "mode": "simulated",
+                "error": None,
+                "diagnostic_error": None
+            }
 
         print(f"[EmailService] [Logging] event=smtp_credentials_missing type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false")
         return {

@@ -28,7 +28,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
 
   useEffect(() => {
     if (isOpen && payment) {
-      setRecipientEmail(payment.customer?.email || 'vvijwal01@gmail.com');
+      setRecipientEmail(payment.customer?.email || '');
       loadPreview();
     } else {
       setSendSuccess(null);
@@ -55,10 +55,14 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
 
   const handleSend = async () => {
     if (!payment) return;
+    const targetEmail = recipientEmail.trim() || payment.customer?.email;
+    if (!targetEmail) {
+      setError(`No customer email found for payment ${payment.id}. Please specify a recipient.`);
+      return;
+    }
     setSending(true);
     setError(null);
     setDiagnosticDetails(null);
-    const targetEmail = recipientEmail.trim() || payment.customer?.email || 'vvijwal01@gmail.com';
     try {
       const res = await api.sendEmail(
         payment.id,

@@ -293,10 +293,13 @@ def send_recovery_email(
             }
 
         cust = payment.customer
-        if not cust or not cust.email:
-            err_msg = f"Payment {payment_id} has no valid customer email address."
+        if not cust or not cust.email or not cust.email.strip() or "@" not in cust.email:
+            err_msg = f"No customer email found for payment {payment_id}."
             logger.warning(f"[Celery] {err_msg}")
             return {"success": False, "status": "NO_CUSTOMER_EMAIL", "error": err_msg}
+
+        recipient_domain = cust.email.split("@")[-1] if "@" in cust.email else "unknown"
+        logger.info(f"[EmailService] [Logging] event=transactional_email payment_id={payment.id} customer_id={cust.id} recipient_source=payment.customer.email recipient_domain={recipient_domain}")
 
         # 3. Generate Personal Dunning Copy via DunningEngine
         update_link = EmailService.get_payment_update_url(payment.id)
