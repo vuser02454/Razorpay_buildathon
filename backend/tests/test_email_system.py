@@ -356,3 +356,106 @@ def test_supabase_communication_audit_logging():
     history = store.get_communications(admin_id=DEMO_ADMIN_ID, payment_id="pay_audit_test_01")
     assert len(history) >= 1
     assert history[-1].customer_email == "audit@example.in"
+
+
+def test_dynamic_customer_recipient_resolution_xyz_gmail():
+    """
+    Verify payment.customer.email = 'xyz@gmail.com' is dynamically selected and used as recipient.
+    """
+    from app.services.emailjs_provider import EmailJSProvider
+    from unittest.mock import MagicMock
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "OK"
+
+    with patch("httpx.Client.post", return_value=mock_resp) as mock_post:
+        with patch.dict("os.environ", {
+            "EMAILJS_SERVICE_ID": "service_test",
+            "EMAILJS_TEMPLATE_ID": "template_test",
+            "EMAILJS_PUBLIC_KEY": "public_test"
+        }):
+            res = EmailJSProvider.send_transactional(
+                to_email="xyz@gmail.com",
+                subject="Action Required: Update Payment Method",
+                template_params={
+                    "customer_name": "Test Customer",
+                    "amount": 3500.0,
+                    "currency": "INR"
+                }
+            )
+            assert res["success"] is True
+            assert res["recipient"] == "xyz@gmail.com"
+            
+            # Verify exact payload sent to EmailJS REST API
+            mock_post.assert_called_once()
+            called_payload = mock_post.call_args[1]["json"]
+            assert called_payload["template_params"]["to_email"] == "xyz@gmail.com"
+            assert called_payload["template_params"]["customer_email"] == "xyz@gmail.com"
+
+
+def test_different_customers_receive_own_emails():
+    """
+    Verify distinct customers receive transactional notifications at their own respective addresses.
+    """
+    from app.services.emailjs_provider import EmailJSProvider
+
+    res_rahul = EmailJSProvider.send_transactional(
+        to_email="rahul.test@gmail.com",
+        subject="Payment Retry Scheduled",
+        template_params={"customer_name": "Rahul Sharma", "amount": 28000.0}
+    )
+    res_priya = EmailJSProvider.send_transactional(
+        to_email="priya.test@gmail.com",
+        subject="Action Required",
+        template_params={"customer_name": "Priya Venkatesh", "amount": 64000.0}
+    )
+
+    assert res_rahul["recipient"] == "rahul.test@gmail.com"
+    assert res_priya["recipient"] == "priya.test@gmail.com"
+    assert res_rahul["recipient"] != res_priya["recipient"]
+
+
+def test_enterprise_and_admin_never_leak_as_fallback():
+    """
+    Verify enterprise@corp.in and admin.email are NEVER selected as customer recipients.
+    """
+    from app.services.emailjs_provider import EmailJSProvider
+
+    target_email = "custom.buyer@example.com"
+    admin_email = "admin@recoverai.ai"
+
+    res = EmailJSProvider.send_transactional(
+        to_email=target_email,
+        subject="Invoice Update",
+        template_params={"customer_name": "Buyer"}
+    )
+    assert res["recipient"] == target_email
+    assert res["recipient"] != "enterprise@corp.in"
+    assert res["recipient"] != admin_email
+    assert "corp.in" not in res["recipient"]
+
+
+def test_missing_customer_email_causes_safe_failure():
+    """
+    Verify empty or invalid customer email is rejected and does not fall back to admin or demo address.
+    """
+    from app.services.emailjs_provider import EmailJSProvider
+
+    res_empty = EmailJSProvider.send_transactional(
+        to_email="",
+        subject="Payment Update",
+        template_params={}
+    )
+    assert res_empty["success"] is False
+    assert res_empty["status"] == "FAILED"
+    assert "Invalid recipient" in res_empty["error"]
+
+    res_invalid = EmailJSProvider.send_transactional(
+        to_email="not-an-email",
+        subject="Payment Update",
+        template_params={}
+    )
+    assert res_invalid["success"] is False
+    assert res_invalid["status"] == "FAILED"
+

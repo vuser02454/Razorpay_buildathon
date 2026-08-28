@@ -108,9 +108,12 @@ class EmailJSProvider:
         public_key = os.getenv("EMAILJS_PUBLIC_KEY") or getattr(settings, "EMAILJS_PUBLIC_KEY", "")
         private_key = os.getenv("EMAILJS_PRIVATE_KEY") or getattr(settings, "EMAILJS_PRIVATE_KEY", "")
 
-        # Enrich template parameters with standard parameters if missing
+        # Enrich template parameters with standard parameters
         params = dict(template_params)
-        params.setdefault("to_email", to_email)
+        params["to_email"] = to_email.strip()
+        params.setdefault("customer_email", to_email.strip())
+        params.setdefault("recipient_email", to_email.strip())
+        params.setdefault("to_name", params.get("customer_name", "Valued Customer"))
         params.setdefault("subject", subject)
         params.setdefault("email_type", type_str)
         params.setdefault("timestamp", now_str)
