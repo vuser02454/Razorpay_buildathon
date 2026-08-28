@@ -459,3 +459,335 @@ def test_missing_customer_email_causes_safe_failure():
     assert res_invalid["success"] is False
     assert res_invalid["status"] == "FAILED"
 
+
+# ─── ROUTE INTEGRATION TESTS: POST /api/recovery/email/send ─────────────────
+
+@pytest.fixture
+def client():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.api.auth import get_current_admin, AdminProfile
+    from app.db.store import DEMO_ADMIN_ID
+
+    async def override_admin():
+        return AdminProfile(
+            id=DEMO_ADMIN_ID,
+            email="admin@recoverai.ai",
+            name="Merchant Admin",
+            role="ADMIN",
+            created_at="2026-01-01T00:00:00Z"
+        )
+
+    app.dependency_overrides[get_current_admin] = override_admin
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_route_integration_payment_xyz_gmail(client):
+    """
+    Test A & H: payment.customer.email = 'xyz@gmail.com'
+    → POST /api/recovery/email/send resolves xyz@gmail.com and sends it in EmailJS to_email.
+    """
+    from unittest.mock import MagicMock
+    from app.models.schemas import Customer, Payment, PaymentStatus, PaymentFailure, FailureType, PaymentMethod
+
+    # 1. Create a payment in the store belonging to xyz@gmail.com
+    cust = Customer(id="cust_xyz_01", name="XYZ Customer", email="xyz@gmail.com")
+    payment = Payment(
+        id="pay_route_xyz_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id=cust.id,
+        customer=cust,
+        amount=4500.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_xyz_01",
+            payment_id="pay_route_xyz_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Expired Card",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        payment_method=PaymentMethod(id="pm_xyz_01", type="card", last4="9911"),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[payment.id] = payment
+
+    with patch("app.services.emailjs_provider.EmailJSProvider.is_configured", return_value=True):
+        with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+            mock_emailjs.return_value = {
+                "success": True,
+                "email_type": "RECOVERY_ACTION_REQUIRED",
+                "recipient": "xyz@gmail.com",
+                "message_id": "msg_xyz_123",
+                "provider": "emailjs",
+                "status": "SENT"
+            }
+            response = client.post(
+                "/api/recovery/email/send",
+                json={"payment_id": "pay_route_xyz_01"}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "xyz@gmail.com" in data["message"]
+
+            mock_emailjs.assert_called_once()
+            called_args = mock_emailjs.call_args[1]
+            assert called_args["to_email"] == "xyz@gmail.com"
+            assert called_args["template_params"]["to_email"] == "xyz@gmail.com"
+            assert "update_link" in called_args["template_params"]
+
+
+def test_route_integration_payment_rahul_and_priya(client):
+    """
+    Test B & C: Verify different customer records receive emails at their own addresses.
+    """
+    from unittest.mock import MagicMock
+    from app.models.schemas import Customer, Payment, PaymentStatus, PaymentFailure, FailureType, PaymentMethod
+
+    cust_rahul = Customer(id="cust_r01", name="Rahul Test", email="rahul@gmail.com")
+    pay_rahul = Payment(
+        id="pay_rahul_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id=cust_rahul.id,
+        customer=cust_rahul,
+        amount=28000.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_r01",
+            payment_id="pay_rahul_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Card Expired",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        payment_method=PaymentMethod(id="pm_r01", type="card"),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[pay_rahul.id] = pay_rahul
+
+    cust_priya = Customer(id="cust_p01", name="Priya Test", email="priya@gmail.com")
+    pay_priya = Payment(
+        id="pay_priya_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id=cust_priya.id,
+        customer=cust_priya,
+        amount=64000.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_p01",
+            payment_id="pay_priya_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Card Expired",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        payment_method=PaymentMethod(id="pm_p01", type="card"),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[pay_priya.id] = pay_priya
+
+    with patch("app.services.emailjs_provider.EmailJSProvider.is_configured", return_value=True):
+        with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+            mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
+
+            # Call for Rahul
+            res_r = client.post("/api/recovery/email/send", json={"payment_id": "pay_rahul_01"})
+            assert res_r.status_code == 200
+            assert "rahul@gmail.com" in res_r.json()["message"]
+            assert mock_emailjs.call_args[1]["to_email"] == "rahul@gmail.com"
+
+            mock_emailjs.reset_mock()
+
+            # Call for Priya
+            res_p = client.post("/api/recovery/email/send", json={"payment_id": "pay_priya_01"})
+            assert res_p.status_code == 200
+            assert "priya@gmail.com" in res_p.json()["message"]
+            assert mock_emailjs.call_args[1]["to_email"] == "priya@gmail.com"
+
+
+def test_route_integration_missing_customer_email_returns_400(client):
+    """
+    Test D: payment.customer.email is missing -> HTTP 400, EmailJS is NOT called.
+    """
+    from app.models.schemas import Customer, Payment, PaymentStatus, PaymentFailure, FailureType
+
+    cust_no_email = Customer(id="cust_no_email_01", name="No Email User", email="")
+    pay = Payment(
+        id="pay_missing_email_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id=cust_no_email.id,
+        customer=cust_no_email,
+        amount=1500.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_no_email_01",
+            payment_id="pay_missing_email_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Card Expired",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[pay.id] = pay
+
+    with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+        response = client.post(
+            "/api/recovery/email/send",
+            json={"payment_id": "pay_missing_email_01"}
+        )
+        assert response.status_code == 400
+        assert "Customer email is missing" in response.json()["detail"]
+        mock_emailjs.assert_not_called()
+
+
+def test_route_integration_null_customer_returns_400(client):
+    """
+    Test E: payment.customer does not exist -> HTTP 400, EmailJS is NOT called.
+    """
+    from app.models.schemas import Payment, PaymentStatus, PaymentFailure, FailureType
+
+    pay_no_cust = Payment(
+        id="pay_null_cust_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id="cust_nonexistent",
+        customer=None,
+        amount=1500.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_null_cust_01",
+            payment_id="pay_null_cust_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Card Expired",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[pay_no_cust.id] = pay_no_cust
+
+    with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+        response = client.post(
+            "/api/recovery/email/send",
+            json={"payment_id": "pay_null_cust_01"}
+        )
+        assert response.status_code == 400
+        assert "Customer email is missing" in response.json()["detail"]
+        mock_emailjs.assert_not_called()
+
+
+def test_route_integration_payload_enterprise_ignored(client):
+    """
+    Test F & G: payload.customer_email containing 'enterprise@corp.in' or admin email
+    is strictly ignored when payment.customer.email = 'xyz@gmail.com'.
+    """
+    from unittest.mock import MagicMock
+    from app.models.schemas import Customer, Payment, PaymentStatus, PaymentFailure, FailureType
+
+    cust = Customer(id="cust_sec_01", name="Real Customer", email="xyz@gmail.com")
+    payment = Payment(
+        id="pay_sec_iso_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id=cust.id,
+        customer=cust,
+        amount=5000.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_sec_01",
+            payment_id="pay_sec_iso_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Expired Card",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[payment.id] = payment
+
+    with patch("app.services.emailjs_provider.EmailJSProvider.is_configured", return_value=True):
+        with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+            mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
+            # Attempt injection via payload.customer_email
+            response = client.post(
+                "/api/recovery/email/send",
+                json={
+                    "payment_id": "pay_sec_iso_01",
+                    "customer_email": "enterprise@corp.in"
+                }
+            )
+            assert response.status_code == 200
+            assert "xyz@gmail.com" in response.json()["message"]
+            assert "enterprise@corp.in" not in response.json()["message"]
+
+            # Verify EmailJS was sent ONLY to xyz@gmail.com
+            assert mock_emailjs.call_args[1]["to_email"] == "xyz@gmail.com"
+            assert mock_emailjs.call_args[1]["to_email"] != "enterprise@corp.in"
+
+
+def test_regression_enterprise_corp_in_never_becomes_recipient(client):
+    """
+    Regression Test: enterprise@corp.in can NEVER become the transactional recipient.
+    """
+    from unittest.mock import MagicMock
+    from app.models.schemas import Customer, Payment, PaymentStatus, PaymentFailure, FailureType
+
+    cust = Customer(id="cust_reg_01", name="Authorized User", email="authorized.user@gmail.com")
+    payment = Payment(
+        id="pay_reg_01",
+        admin_id=DEMO_ADMIN_ID,
+        customer_id=cust.id,
+        customer=cust,
+        amount=10000.0,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        failure=PaymentFailure(
+            id="fail_reg_01",
+            payment_id="pay_reg_01",
+            error_code="CARD_EXPIRED",
+            decline_reason="Expired Card",
+            failure_type=FailureType.CREDENTIAL_ISSUE,
+            is_retryable=False,
+            created_at="2026-01-01T00:00:00Z"
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z"
+    )
+    store.payments[payment.id] = payment
+
+    with patch("app.services.emailjs_provider.EmailJSProvider.is_configured", return_value=True):
+        with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+            mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
+            response = client.post(
+                "/api/recovery/email/send",
+                json={
+                    "payment_id": "pay_reg_01",
+                    "customer_email": "enterprise@corp.in"
+                }
+            )
+            assert response.status_code == 200
+            assert "enterprise@corp.in" not in response.json()["message"]
+            assert mock_emailjs.call_args[1]["to_email"] == "authorized.user@gmail.com"
+
+
+
+

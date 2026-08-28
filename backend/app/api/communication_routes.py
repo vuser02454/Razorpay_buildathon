@@ -83,19 +83,18 @@ async def send_recovery_email_endpoint(
     if not policy.dunning_enabled:
         raise HTTPException(status_code=400, detail="Merchant policy currently has automated email communications disabled.")
 
-    # Secure recipient resolution: Extract directly from verified payment record
-    cust_record = payment.customer
-    customer_name = (cust_record.name if cust_record and cust_record.name else None) or payload.customer_name or "Valued Customer"
-    customer_email = (cust_record.email if cust_record and cust_record.email else None) or payload.customer_email
-
-    if not customer_email or not customer_email.strip() or "@" not in customer_email:
+    # Authoritative recipient resolution: Exclusively from payment.customer.email
+    if not payment.customer or not payment.customer.email or not payment.customer.email.strip() or "@" not in payment.customer.email:
         raise HTTPException(
             status_code=400,
-            detail=f"No customer email found for payment {payment.id}. Recipient must be a valid customer email address."
+            detail=f"Customer email is missing or invalid for payment {payment.id}. Transactional recovery email cannot be dispatched."
         )
 
+    customer_name = payment.customer.name.strip() if payment.customer.name else "Valued Customer"
+    customer_email = payment.customer.email.strip()
+
     recipient_domain = customer_email.split("@")[-1] if "@" in customer_email else "unknown"
-    print(f"[EmailService] [Logging] event=transactional_email payment_id={payment.id} customer_id={cust_record.id if cust_record else 'unknown'} recipient_source=customer.email recipient_domain={recipient_domain}")
+    print(f"[EmailService] [Logging] event=transactional_email payment_id={payment.id} customer_id={payment.customer_id} recipient_source=payment.customer.email recipient={customer_email} recipient_domain={recipient_domain}")
 
     failure_type = payment.failure.failure_type.value if payment.failure else "credential_issue"
     failure_reason = payment.failure.decline_reason if payment.failure else "Saved card expired or requires bank update"

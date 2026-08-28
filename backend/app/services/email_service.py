@@ -513,7 +513,26 @@ class EmailService:
         if not resolved_html:
             resolved_html = TemplateManager.render_template(email_type, context or {})
 
-        # Primary: Gmail SMTP dispatch
+        # 1. Primary: EmailJS REST API dispatch if configured
+        if EmailJSProvider.is_configured():
+            params = dict(context or {})
+            params["to_email"] = to_email.strip()
+            params.setdefault("customer_email", to_email.strip())
+            params.setdefault("recipient_email", to_email.strip())
+            params.setdefault("to_name", params.get("customer_name", "Valued Customer"))
+            params.setdefault("subject", subject)
+            params.setdefault("email_type", email_type.value if isinstance(email_type, EmailType) else str(email_type))
+            if "update_link" not in params:
+                params["update_link"] = params.get("payment_update_url") or "https://share.google/IhXXtpGBbnNE8J5DV"
+
+            return EmailJSProvider.send_transactional(
+                to_email=to_email,
+                subject=subject,
+                template_params=params,
+                email_type=email_type
+            )
+
+        # 2. Secondary: Gmail SMTP dispatch
         return cls._dispatch_smtp(
             to_email=to_email,
             subject=subject,

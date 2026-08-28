@@ -117,6 +117,8 @@ class EmailJSProvider:
         params.setdefault("subject", subject)
         params.setdefault("email_type", type_str)
         params.setdefault("timestamp", now_str)
+        if "update_link" not in params:
+            params["update_link"] = params.get("payment_update_url") or "https://share.google/IhXXtpGBbnNE8J5DV"
 
         # 2. Live dispatch if credentials exist
         if service_id and template_id and public_key:
