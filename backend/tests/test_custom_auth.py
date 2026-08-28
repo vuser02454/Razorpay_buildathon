@@ -61,13 +61,14 @@ def test_signup_successful(client):
             assert "password" not in data["user"]
             assert "password_hash" not in data["user"]
 
-            # Verify EmailJS received exact user email
+            # Verify EmailJS received exact user email and canonical variables
             mock_emailjs.assert_called_once()
             called_args = mock_emailjs.call_args[1]
             assert called_args["to_email"] == signup_email
             assert called_args["template_params"]["to_email"] == signup_email
-            assert called_args["template_params"]["email"] == signup_email
+            assert called_args["template_params"]["to_name"] == signup_name
             assert "verification_link" in called_args["template_params"]
+            assert "reset_link" not in called_args["template_params"]
             assert "token=" in called_args["template_params"]["verification_link"]
 
 
@@ -262,10 +263,14 @@ def test_forgot_password_and_reset_flow(client):
             res_req = client.post("/api/auth/forgot-password", json={"email": reset_email})
             assert res_req.status_code == 200
 
-            # Verify recipient was reset_email
+            # Verify recipient was reset_email and canonical variables
             mock_emailjs.assert_called_once()
             called_args = mock_emailjs.call_args[1]
             assert called_args["to_email"] == reset_email
+            assert called_args["template_params"]["to_email"] == reset_email
+            assert called_args["template_params"]["to_name"] == "Reset User"
+            assert "reset_link" in called_args["template_params"]
+            assert "verification_link" not in called_args["template_params"]
             assert "reset-password?token=" in called_args["template_params"]["reset_link"]
 
     # Extract reset token from store

@@ -240,16 +240,9 @@ class AuthService:
         subject = "⚡ Verify your RecoverAI Account"
 
         template_params = {
-            "email": clean_recipient,
             "to_email": clean_recipient,
-            "recipient_email": clean_recipient,
-            "name": user.name,
-            "customer_name": user.name,
             "to_name": user.name,
             "verification_link": verification_link,
-            "verify_link": verification_link,
-            "update_link": verification_link,
-            "link": verification_link,
             "subject": subject
         }
 
@@ -508,17 +501,9 @@ class AuthService:
         subject = "⚡ Reset your RecoverAI Password"
 
         template_params = {
-            "email": clean_recipient,
             "to_email": clean_recipient,
-            "recipient_email": clean_recipient,
-            "name": user.name,
-            "customer_name": user.name,
             "to_name": user.name,
             "reset_link": reset_link,
-            "password_reset_link": reset_link,
-            "verification_link": reset_link,
-            "update_link": reset_link,
-            "link": reset_link,
             "subject": subject
         }
 

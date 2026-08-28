@@ -104,6 +104,7 @@ class EmailJSProvider:
         """
         now_str = datetime.now(timezone.utc).isoformat()
         type_str = email_type.value if isinstance(email_type, EmailType) else str(email_type)
+        type_str_lower = type_str.lower()
 
         # 1. Validation check
         if not to_email or "@" not in to_email or "." not in to_email.split("@")[-1]:
@@ -126,17 +127,19 @@ class EmailJSProvider:
         public_key = os.getenv("EMAILJS_PUBLIC_KEY") or getattr(settings, "EMAILJS_PUBLIC_KEY", "")
         private_key = os.getenv("EMAILJS_PRIVATE_KEY") or getattr(settings, "EMAILJS_PRIVATE_KEY", "")
 
-        # Enrich template parameters with standard parameters
+        # Enrich template parameters with canonical variables
         params = dict(template_params)
         params["to_email"] = to_email.strip()
-        params.setdefault("customer_email", to_email.strip())
-        params.setdefault("recipient_email", to_email.strip())
-        params.setdefault("to_name", params.get("customer_name", "Valued Customer"))
+        params.setdefault("to_name", params.get("name") or params.get("customer_name") or "User")
         params.setdefault("subject", subject)
-        params.setdefault("email_type", type_str)
-        params.setdefault("timestamp", now_str)
-        if "update_link" not in params:
-            params["update_link"] = params.get("payment_update_url") or "https://share.google/IhXXtpGBbnNE8J5DV"
+
+        # For customer dunning / recovery notices only, provide update_link and tracking fields
+        if "reset" not in type_str_lower and "verify" not in type_str_lower and "auth" not in type_str_lower:
+            params.setdefault("customer_email", to_email.strip())
+            params.setdefault("email_type", type_str)
+            params.setdefault("timestamp", now_str)
+            if "update_link" not in params:
+                params["update_link"] = params.get("payment_update_url") or "https://share.google/IhXXtpGBbnNE8J5DV"
 
         # 2. Live dispatch if credentials exist
         if service_id and template_id and public_key:
