@@ -30,7 +30,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({
       await authStore.resetPasswordForEmail(email);
       setSuccess(true);
     } catch (err: any) {
-      console.error("Supabase password recovery error:", err);
+      console.error("Password recovery error:", err);
       setError(err.message || 'Unable to send password reset email.');
     } finally {
       setLoading(false);

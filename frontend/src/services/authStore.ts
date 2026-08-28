@@ -1,5 +1,3 @@
-import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured, getPublicSupabaseAuthDiagnostics } from './supabase';
 import { API_BASE } from './config';
 
 export interface AdminProfile {
@@ -9,6 +7,7 @@ export interface AdminProfile {
   role: string;
   is_demo: boolean;
   created_at: string;
+  email_verified?: boolean;
   email_confirmed_at?: string | null;
 }
 
@@ -20,7 +19,7 @@ export interface AuthSession {
 const STORAGE_KEY = 'recoverai_auth_session';
 
 /**
- * Production-safe Auth error snapshot. Never includes tokens, JWTs, passwords, or API keys.
+ * Production-safe Auth error snapshot.
  */
 export function serializeAuthError(err: any): Record<string, unknown> {
   if (!err) return { present: false };
@@ -31,451 +30,384 @@ export function serializeAuthError(err: any): Record<string, unknown> {
     status: err.status ?? err.statusCode ?? null,
     code: err.code || err.error_code || null,
     message: rawMsg || null,
-    error_id: err.error_id || err.__errorId || null,
   };
 }
 
-function diagnosticAuthMessage(err: any, rawMsg: string): string {
-  const snap = serializeAuthError(err);
-  const parts = [rawMsg || 'unknown Supabase Auth error'];
-  if (snap.status) parts.push(`status=${snap.status}`);
-  if (snap.code) parts.push(`code=${snap.code}`);
-  if (snap.error_id) parts.push(`error_id=${snap.error_id}`);
-  return `Supabase Auth error: ${parts.join(' | ')}`;
-}
-
 /**
- * Format any Supabase or network authentication error into a user-facing message.
- * During diagnosis, confirmation/mailer failures keep the exact Supabase error text.
- * Strict zero exposure of tokens, JWTs, or secrets.
+ * Format error into a user-facing message.
  */
 export function formatAuthError(err: any): string {
   if (!err) return 'An unexpected error occurred. Please try again.';
   const rawMsg = typeof err === 'string' ? err : err.message || err.error_description || err.msg || '';
   const msg = rawMsg.toLowerCase();
-  const code = String(err.code || err.error_code || '').toLowerCase();
 
-  // Do not replace mailer / confirmation failures with a generic OTP message.
-  if (
-    msg.includes('confirmation email') ||
-    msg.includes('error sending') ||
-    code === 'unexpected_failure' ||
-    code === 'over_email_send_rate_limit'
-  ) {
-    return diagnosticAuthMessage(err, rawMsg);
-  }
-
-  if (msg.includes('invalid login credentials') || msg.includes('invalid_grant') || msg.includes('invalid credentials')) {
+  if (msg.includes('invalid login credentials') || msg.includes('incorrect') || msg.includes('invalid credentials')) {
     return 'Email or password is incorrect.';
   }
-  if (msg.includes('email not confirmed') || msg.includes('unconfirmed')) {
+  if (msg.includes('verify your email') || msg.includes('unverified') || msg.includes('email not confirmed')) {
     return 'Please verify your email before signing in.';
   }
-  if (msg.includes('already registered') || msg.includes('user_already_exists') || msg.includes('already exists')) {
+  if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('duplicate')) {
     return 'An account with this email already exists.';
   }
-  if (msg.includes('expired') || msg.includes('token expired') || msg.includes('otp_expired')) {
-    return 'This recovery link has expired. Request a new one.';
+  if (msg.includes('expired')) {
+    return 'This link has expired. Please request a new one.';
   }
   if (msg.includes('at least 6 characters') || msg.includes('weak_password')) {
     return 'Password must be at least 6 characters.';
   }
-  if (msg.includes('rate limit')) {
-    return 'Too many attempts. Please wait a moment and try again.';
-  }
   if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('load failed')) {
-    if (!isSupabaseConfigured) {
-      return 'Supabase Auth credentials are not configured in Vercel environment. Please click "Continue with Demo Account" or add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
-    }
     return 'Unable to connect to authentication server. Please check your internet connection.';
   }
   if (rawMsg) {
-    return diagnosticAuthMessage(err, rawMsg);
+    return rawMsg;
   }
   return 'Unable to authenticate right now. Please try again.';
 }
 
 export const authStore = {
   _currentSession: null as AuthSession | null,
+  _listeners: [] as Array<(admin: AdminProfile | null) => void>,
 
-  mapUserToAdmin(user: User, isDemo: boolean = false): AdminProfile {
-    return {
-      id: user.id,
-      email: user.email || '',
-      name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Admin',
-      role: 'ADMIN',
-      is_demo: isDemo,
-      created_at: user.created_at || new Date().toISOString(),
-      email_confirmed_at: user.email_confirmed_at || (user as any).confirmed_at || null,
-    };
-  },
-
+  /**
+   * Returns current active cached session.
+   */
   getSession(): AuthSession | null {
-    if (this._currentSession) return this._currentSession;
+    if (this._currentSession) {
+      return this._currentSession;
+    }
     try {
-      const data = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        this._currentSession = JSON.parse(data);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        this._currentSession = JSON.parse(stored);
         return this._currentSession;
       }
     } catch {
-      // Ignore JSON parse errors
+      // Ignore localStorage parse errors
     }
     return null;
   },
 
-  setSession(session: AuthSession, persistLocal: boolean = false) {
+  /**
+   * Persists active session to local storage.
+   */
+  setSession(session: AuthSession): void {
     this._currentSession = session;
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    if (persistLocal) {
+    try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      // Ignore localStorage quota errors
     }
+    this._notifyListeners(session.admin);
   },
 
-  clearSession() {
+  /**
+   * Clears session on logout.
+   */
+  clearSession(): void {
     this._currentSession = null;
-    sessionStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+    this._notifyListeners(null);
   },
 
-  getToken(): string | null {
-    return this.getSession()?.token || null;
-  },
-
+  /**
+   * Returns authenticated admin profile or null.
+   */
   getAdmin(): AdminProfile | null {
-    return this.getSession()?.admin || null;
+    const session = this.getSession();
+    return session ? session.admin : null;
   },
 
+  /**
+   * Returns Bearer auth token if present.
+   */
+  getToken(): string | null {
+    const session = this.getSession();
+    return session ? session.token : null;
+  },
+
+  /**
+   * True if authenticated.
+   */
   isAuthenticated(): boolean {
     const session = this.getSession();
     return !!session?.token;
   },
 
   /**
-   * Initializes the session on application startup from Supabase Auth.
+   * Subscribe to auth state changes.
+   */
+  onAuthStateChange(callback: (event: string, session: AuthSession | null, admin: AdminProfile | null) => void) {
+    const listener = (admin: AdminProfile | null) => {
+      const session = this.getSession();
+      callback(admin ? 'SIGNED_IN' : 'SIGNED_OUT', session, admin);
+    };
+    this._listeners.push(listener);
+    return {
+      data: {
+        subscription: {
+          unsubscribe: () => {
+            this._listeners = this._listeners.filter(l => l !== listener);
+          }
+        }
+      }
+    };
+  },
+
+  _notifyListeners(admin: AdminProfile | null) {
+    this._listeners.forEach(l => l(admin));
+  },
+
+  /**
+   * Initializes the session on startup by validating with GET /api/auth/me.
    */
   async initSession(): Promise<AdminProfile | null> {
+    const cached = this.getSession();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (cached?.token) {
+      headers['Authorization'] = `Bearer ${cached.token}`;
+    }
+
     try {
-      // Check existing cached session first (especially for demo admin)
-      const cached = this.getSession();
-      if (cached?.admin?.is_demo) {
-        return cached.admin;
-      }
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        method: 'GET',
+        headers,
+        credentials: 'include'
+      });
 
-      if (isSupabaseConfigured) {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session || !session.user) {
-          if (!cached?.admin?.is_demo) {
-            this.clearSession();
-          }
-          return cached?.admin?.is_demo ? cached.admin : null;
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          const admin: AdminProfile = {
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name,
+            role: data.user.role || 'ADMIN',
+            is_demo: data.user.is_demo || false,
+            created_at: data.user.created_at || new Date().toISOString(),
+            email_verified: data.user.email_verified
+          };
+          this.setSession({
+            token: cached?.token || 'session_cookie_auth',
+            admin
+          });
+          return admin;
         }
-
-        // Email verification check
-        const isEmailConfirmed = Boolean(
-          session.user.email_confirmed_at || (session.user as any).confirmed_at
-        );
-
-        if (!isEmailConfirmed) {
-          // Unverified email: do not expose authenticated session
-          this.clearSession();
-          return null;
-        }
-
-        const admin = this.mapUserToAdmin(session.user, false);
-        this.setSession({
-          token: session.access_token,
-          admin,
-        });
-        return admin;
       }
     } catch (e) {
-      console.warn('[RecoverAI] Failed to retrieve Supabase session on startup:', e);
+      console.warn('[RecoverAI] Session validation error:', e);
+    }
+
+    // If server returned 401 and was not demo mode
+    if (cached && !cached.admin?.is_demo) {
+      this.clearSession();
     }
     return this.getAdmin();
   },
 
   /**
-   * Listen for Supabase Auth state changes.
-   */
-  onAuthStateChange(
-    callback: (event: AuthChangeEvent, session: Session | null, admin: AdminProfile | null) => void
-  ) {
-    if (!isSupabaseConfigured) {
-      return { data: { subscription: { unsubscribe: () => {} } } };
-    }
-
-    return supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        const isConfirmed = Boolean(
-          session.user.email_confirmed_at || (session.user as any).confirmed_at
-        );
-        if (isConfirmed) {
-          const admin = this.mapUserToAdmin(session.user, false);
-          this.setSession({
-            token: session.access_token,
-            admin,
-          });
-          callback(event, session, admin);
-          return;
-        }
-      }
-
-      if (event === 'SIGNED_OUT') {
-        this.clearSession();
-        callback(event, null, null);
-      } else {
-        callback(event, session, null);
-      }
-    });
-  },
-
-  /**
-   * Register a new admin via Supabase Auth.
-   * Sends a Supabase verification email with redirect to /auth/callback.
+   * Register a new admin account via backend.
    */
   async signup(name: string, email: string, password: string): Promise<{
-    user: User | null;
+    user: any;
     needsEmailVerification: boolean;
   }> {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
 
-    if (!isSupabaseConfigured) {
-      const localAdmin: AdminProfile = {
-        id: `admin_${Math.random().toString(36).substring(2, 10)}`,
+    const res = await fetch(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        name: cleanName,
         email: cleanEmail,
-        name: cleanName || cleanEmail.split('@')[0] || 'Admin',
-        role: 'ADMIN',
-        is_demo: false,
-        created_at: new Date().toISOString(),
-        email_confirmed_at: new Date().toISOString(),
-      };
-      this.setSession({
-        token: `token_${Math.random().toString(36).substring(2, 10)}`,
-        admin: localAdmin,
-      });
-      return {
-        user: null,
-        needsEmailVerification: false,
-      };
+        password
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || data.message || 'Registration failed. Please check your credentials.');
     }
 
-    const redirectUrl = `${window.location.origin}/auth/callback`;
-    const diagnostics = getPublicSupabaseAuthDiagnostics();
-
-    console.info('[RecoverAI][AuthDiagnostics] signUp start', {
-      ...diagnostics,
-      emailRedirectTo: redirectUrl,
-      emailDomain: cleanEmail.includes('@') ? cleanEmail.split('@')[1] : null,
-    });
-
-    const { data, error } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password,
-      options: {
-        data: {
-          full_name: cleanName,
-        },
-        emailRedirectTo: redirectUrl,
-      },
-    });
-
-    if (error) {
-      console.error('[RecoverAI][AuthDiagnostics] signUp failed', {
-        ...diagnostics,
-        emailRedirectTo: redirectUrl,
-        supabase: serializeAuthError(error),
-      });
-      throw new Error(formatAuthError(error));
-    }
-
-    const isConfirmed = Boolean(
-      data.user?.email_confirmed_at || (data.user as any)?.confirmed_at
-    );
-    const identitiesCount = Array.isArray(data.user?.identities) ? data.user!.identities.length : null;
-
-    console.info('[RecoverAI][AuthDiagnostics] signUp succeeded', {
-      ...diagnostics,
-      userCreated: Boolean(data.user?.id),
-      identitiesCount,
-      emailConfirmed: isConfirmed,
-      hasSession: Boolean(data.session),
-    });
-
-    // If confirmation is required (default standard behavior), user must check their email
     return {
       user: data.user,
-      needsEmailVerification: !isConfirmed,
+      needsEmailVerification: Boolean(data.needs_email_verification)
     };
   },
 
   /**
-   * Sign in with Supabase Auth using email and password.
+   * Sign in using backend session authentication.
    */
   async login(email: string, password: string): Promise<AdminProfile> {
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!isSupabaseConfigured) {
-      const localAdmin: AdminProfile = {
-        id: `admin_${Math.random().toString(36).substring(2, 10)}`,
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
         email: cleanEmail,
-        name: cleanEmail.split('@')[0] || 'Admin',
-        role: 'ADMIN',
-        is_demo: false,
-        created_at: new Date().toISOString(),
-        email_confirmed_at: new Date().toISOString(),
-      };
-      this.setSession({
-        token: `token_${Math.random().toString(36).substring(2, 10)}`,
-        admin: localAdmin,
-      });
-      return localAdmin;
-    }
-
-    // 1. Authenticate with Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
+        password
+      })
     });
 
-    if (error) {
-      throw new Error(formatAuthError(error));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 403 || (data.detail && data.detail.includes('verify your email'))) {
+        const err = new Error(data.detail || 'Please verify your email before logging in.');
+        (err as any).unverified = true;
+        (err as any).email = cleanEmail;
+        throw err;
+      }
+      throw new Error(data.detail || 'Email or password is incorrect.');
     }
 
-    if (!data.user || !data.session) {
-      throw new Error('Unable to authenticate right now. Please try again.');
-    }
+    const admin: AdminProfile = {
+      id: data.user.id,
+      email: data.user.email,
+      name: data.user.name,
+      role: data.user.role || 'ADMIN',
+      is_demo: data.user.is_demo || false,
+      created_at: data.user.created_at || new Date().toISOString(),
+      email_verified: data.user.email_verified
+    };
 
-    // 2. Strict Email Verification Verification
-    const isEmailConfirmed = Boolean(
-      data.user.email_confirmed_at || (data.user as any).confirmed_at
-    );
-
-    if (!isEmailConfirmed) {
-      // Sign out unconfirmed session immediately
-      await supabase.auth.signOut().catch(() => {});
-      this.clearSession();
-      const err = new Error('Please verify your email before signing in.');
-      (err as any).unverified = true;
-      (err as any).email = cleanEmail;
-      throw err;
-    }
-
-    const admin = this.mapUserToAdmin(data.user, false);
     this.setSession({
-      token: data.session.access_token,
-      admin,
+      token: data.token,
+      admin
     });
 
     return admin;
   },
 
   /**
-   * 1-Click Controlled Demo Login for Hackathon Judges.
-   * Obtains a secure demo session from the backend without exposing credentials in frontend.
+   * 1-Click Demo login.
    */
   async loginDemo(): Promise<AdminProfile> {
-    try {
-      const res = await fetch(`${API_BASE}/auth/demo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (res.ok) {
-        const data: AuthSession = await res.json();
-        this.setSession(data);
-        return data.admin;
-      }
-    } catch (e) {
-      console.info('[RecoverAI] Backend demo endpoint unreachable. Using standalone demo admin session.');
-    }
-
-    const fallbackDemoAdmin: AdminProfile = {
-      id: 'admin_demo_01',
-      email: 'demo@recoverai.ai',
-      name: 'RecoverAI Demo Admin',
-      role: 'ADMIN',
-      is_demo: true,
-      created_at: new Date().toISOString(),
-      email_confirmed_at: new Date().toISOString(),
-    };
-    const fallbackDemoSession: AuthSession = {
-      token: 'demo_token_recoverai_hackathon_2026',
-      admin: fallbackDemoAdmin,
-    };
-    this.setSession(fallbackDemoSession);
-    return fallbackDemoAdmin;
-  },
-
-  /**
-   * Request password reset email via Supabase Auth.
-   */
-  async resetPasswordForEmail(email: string): Promise<void> {
-    const cleanEmail = email.trim().toLowerCase();
-    const redirectUrl = `${window.location.origin}/auth/callback?type=recovery`;
-
-    console.log('[RecoverAI] Initiating password recovery for:', cleanEmail, 'with redirect:', redirectUrl);
-
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: redirectUrl,
+    const res = await fetch(`${API_BASE}/auth/demo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
     });
 
-    if (error) {
-      console.error("Supabase password recovery error:", error);
-      throw new Error(formatAuthError(error));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Unable to launch demo workspace.');
     }
-  },
 
-  /**
-   * Update password for the currently active recovery session via Supabase Auth.
-   */
-  async updateUserPassword(password: string): Promise<void> {
-    console.log('[RecoverAI] Initiating password update...');
-    const { error } = await supabase.auth.updateUser({
-      password,
+    this.setSession({
+      token: data.token,
+      admin: data.admin
     });
 
-    if (error) {
-      console.error("Supabase password update error:", error);
-      throw new Error(formatAuthError(error));
-    }
+    return data.admin;
   },
 
   /**
-   * Resend signup verification email via Supabase Auth.
+   * Verify email with token.
+   */
+  async verifyEmail(token: string): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/auth/verify-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ token })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Invalid or expired email verification link.');
+    }
+    return true;
+  },
+
+  /**
+   * Resend verification email to unverified address.
    */
   async resendVerificationEmail(email: string): Promise<void> {
     const cleanEmail = email.trim().toLowerCase();
-    const redirectUrl = `${window.location.origin}/auth/callback`;
-
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: cleanEmail,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
+    const res = await fetch(`${API_BASE}/auth/resend-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: cleanEmail })
     });
 
-    if (error) {
-      console.error('[RecoverAI][AuthDiagnostics] resend signup email failed', {
-        ...getPublicSupabaseAuthDiagnostics(),
-        emailRedirectTo: redirectUrl,
-        supabase: serializeAuthError(error),
-      });
-      throw new Error(formatAuthError(error));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Unable to resend verification email.');
     }
   },
 
   /**
-   * Sign out and clear all authenticated and cached state.
+   * Request password reset link.
+   */
+  async resetPasswordForEmail(email: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: cleanEmail })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Unable to process password reset request.');
+    }
+  },
+
+  /**
+   * Reset password with token.
+   */
+  async updateUserPassword(password: string, token?: string): Promise<void> {
+    const resetToken = token || new URLSearchParams(window.location.search).get('token') || '';
+    if (!resetToken) {
+      throw new Error('Password reset token is missing from the link.');
+    }
+
+    const res = await fetch(`${API_BASE}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        token: resetToken,
+        new_password: password
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Unable to reset password. Link may be expired.');
+    }
+  },
+
+  /**
+   * Sign out and destroy session.
    */
   async logout(): Promise<void> {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore network errors on sign out
+    const token = this.getToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
+
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers,
+        credentials: 'include'
+      });
+    } catch {
+      // Ignore network errors on logout
+    }
+
     this.clearSession();
-  },
+  }
 };

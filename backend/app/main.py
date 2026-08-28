@@ -12,13 +12,30 @@ from app.core.config import settings
 app = FastAPI(
     title="RecoverAI Platform",
     version=settings.VERSION,
-    description="RecoverAI — Autonomous AI Revenue Recovery Platform with Gmail SMTP Relay"
+    description="RecoverAI — Autonomous AI Revenue Recovery Platform with Custom Authentication and Gmail SMTP Relay"
 )
 
-# Enable CORS for frontend Vite dev server (port 5173, 5175, etc.)
+# Explicit allowed origins for CORS with credentials
+ALLOWED_ORIGINS = [
+    "https://razorpay-buildathon-ivory.vercel.app",
+    "https://razorpay-buildathon.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5175",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000"
+]
+
+# Enable CORS with credentials support for frontend Vercel and local dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,6 +62,7 @@ def root():
         "ai_engines": ["Google Gemini (Platform Intelligence)", "Grok (Conversational Co-Pilot)"],
         "email_delivery": "Gmail SMTP Relay",
         "payment_gateway": "Razorpay Multi-Tenant OAuth",
+        "auth_architecture": "Backend Session Authentication (Supabase PostgreSQL)",
         "docs": "/docs",
         "health": "/api/health"
     }

@@ -215,12 +215,11 @@ async def test_ai_provider_health_checks():
     assert AIRouter.get_provider_health("langgraph")["status"] == "operational"
     assert AIRouter.get_provider_health("supabase")["status"] == "operational"
 
-def test_supabase_auth_exclusive_and_tenant_security():
-    import base64
-    import json
+def test_custom_auth_exclusive_and_tenant_security():
     from fastapi.testclient import TestClient
     from app.main import app
-    from app.api.auth import get_current_admin, verify_supabase_jwt, DEMO_ADMIN
+    from app.services.auth_service import auth_service
+    from app.api.auth import DEMO_ADMIN
 
     client = TestClient(app)
 
@@ -231,45 +230,36 @@ def test_supabase_auth_exclusive_and_tenant_security():
     assert "token" in demo_data
     assert demo_data["admin"]["id"] == DEMO_ADMIN.id
 
-    # 2. Construct mock Supabase JWT for User Alpha
-    header_b64 = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()).decode().rstrip("=")
-    payload_a = {
-        "sub": "usr_supabase_aaa",
-        "email": "user_a@company.com",
-        "user_metadata": {"full_name": "User Alpha"},
-        "exp": 9999999999
-    }
-    payload_a_b64 = base64.urlsafe_b64encode(json.dumps(payload_a).encode()).decode().rstrip("=")
-    token_a = f"{header_b64}.{payload_a_b64}.signature_mock"
+    # 2. Register and verify a real user
+    user_a, token_a = auth_service.register_user(email="user_a@company.com", password="Password123!", name="User Alpha")
+    auth_service.verify_email_token(token_a)
 
-    # Verify identity derived from Supabase JWT
-    admin_a = verify_supabase_jwt(token_a)
-    assert admin_a.id == "usr_supabase_aaa"
-    assert admin_a.email == "user_a@company.com"
-    assert admin_a.name == "User Alpha"
-    assert not admin_a.is_demo
+    login_res = client.post("/api/auth/login", json={"email": "user_a@company.com", "password": "Password123!"})
+    assert login_res.status_code == 200
+    sess_token_a = login_res.json()["token"]
 
-    # 3. Test authenticated endpoint with User Alpha's Supabase JWT
-    auth_headers_a = {"Authorization": f"Bearer {token_a}"}
+    # 3. Test authenticated endpoint with User Alpha's session
+    auth_headers_a = {"Authorization": f"Bearer {sess_token_a}"}
     me_res = client.get("/api/auth/me", headers=auth_headers_a)
     assert me_res.status_code == 200
-    assert me_res.json()["id"] == "usr_supabase_aaa"
+    assert me_res.json()["user"]["id"] == user_a.id
+    assert me_res.json()["user"]["email"] == "user_a@company.com"
 
     # 4. Multi-Tenant Security: Valid X-Admin-Id matching authenticated user passes
     valid_tenant_res = client.get(
         "/api/auth/me",
-        headers={**auth_headers_a, "X-Admin-Id": "usr_supabase_aaa"}
+        headers={**auth_headers_a, "X-Admin-Id": user_a.id}
     )
     assert valid_tenant_res.status_code == 200
 
     # 5. Multi-Tenant Security: Spoofed X-Admin-Id (User A trying to access User B's tenant) is REJECTED with 403
     spoofed_res = client.get(
         "/api/auth/me",
-        headers={**auth_headers_a, "X-Admin-Id": "usr_supabase_bbb"}
+        headers={**auth_headers_a, "X-Admin-Id": "usr_other_tenant_bbb"}
     )
     assert spoofed_res.status_code == 403
     assert "Tenant identity mismatch" in spoofed_res.json()["detail"]
 
     # 6. Invalid token rejection
-    bad_res = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid_non_jwt_token"})
+    bad_res = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid_nonexistent_token"})
     assert bad_res.status_code == 401

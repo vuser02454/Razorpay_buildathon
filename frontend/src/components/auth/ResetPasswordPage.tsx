@@ -39,13 +39,14 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     setLoading(true);
     setError(null);
     try {
-      await authStore.updateUserPassword(password);
+      const token = new URLSearchParams(window.location.search).get('token') || undefined;
+      await authStore.updateUserPassword(password, token);
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
       }, 2000);
     } catch (err: any) {
-      console.error("Supabase password update error:", err);
+      console.error("Password update error:", err);
       setError(err.message || 'Unable to update password. Please request a new reset link.');
     } finally {
       setLoading(false);
