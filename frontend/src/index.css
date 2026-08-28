@@ -63,6 +63,248 @@ p, span, a, input, textarea, select, button, .font-sans {
 }
 
 /* ═══════════════════════════════════════════════════════════ */
+/* ─── GLASS PANEL & SURFACES ──────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+  color: #0f172a;
+}
+
+.glass-panel-hover:hover {
+  border-color: rgba(148, 163, 184, 0.9);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  color: #f8fafc !important;
+}
+
+.dark .glass-panel-hover:hover {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ─── LIGHT MODE HIGH-CONTRAST TYPOGRAPHY & OVERRIDES ──────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+html:not(.dark) body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* Make white/pale text dark on light backgrounds */
+html:not(.dark) .text-white:not(button *):not(button):not(.btn-white-text *):not(.btn-white-text) {
+  color: #0f172a !important;
+}
+
+html:not(.dark) h1,
+html:not(.dark) h2,
+html:not(.dark) h3,
+html:not(.dark) h4 {
+  color: #0f172a !important;
+}
+
+/* Darken muted and secondary text for crisp readability in light mode */
+html:not(.dark) .text-slate-400 {
+  color: #334155 !important; /* Slate-700 for high readability */
+}
+
+html:not(.dark) .text-slate-500 {
+  color: #475569 !important; /* Slate-600 */
+}
+
+html:not(.dark) .text-slate-300 {
+  color: #1e293b !important; /* Slate-800 */
+}
+
+html:not(.dark) .text-slate-200 {
+  color: #0f172a !important;
+}
+
+/* Color accent text dark overrides in light mode */
+html:not(.dark) .text-indigo-200,
+html:not(.dark) .text-indigo-300 {
+  color: #3730a3 !important; /* Indigo-800 */
+}
+
+html:not(.dark) .text-indigo-400 {
+  color: #4338ca !important; /* Indigo-700 */
+}
+
+html:not(.dark) .text-emerald-200,
+html:not(.dark) .text-emerald-300 {
+  color: #064e3b !important; /* Emerald-900 */
+}
+
+html:not(.dark) .text-emerald-400 {
+  color: #047857 !important; /* Emerald-700 */
+}
+
+html:not(.dark) .text-purple-200,
+html:not(.dark) .text-purple-300 {
+  color: #581c87 !important; /* Purple-900 */
+}
+
+html:not(.dark) .text-purple-400 {
+  color: #7e22ce !important; /* Purple-700 */
+}
+
+html:not(.dark) .text-amber-200,
+html:not(.dark) .text-amber-300 {
+  color: #78350f !important; /* Amber-900 */
+}
+
+html:not(.dark) .text-amber-400 {
+  color: #b45309 !important; /* Amber-700 */
+}
+
+html:not(.dark) .text-cyan-200,
+html:not(.dark) .text-cyan-300 {
+  color: #164e63 !important; /* Cyan-900 */
+}
+
+html:not(.dark) .text-cyan-400 {
+  color: #0e7490 !important; /* Cyan-700 */
+}
+
+html:not(.dark) .text-rose-200,
+html:not(.dark) .text-rose-300 {
+  color: #881337 !important; /* Rose-900 */
+}
+
+html:not(.dark) .text-rose-400 {
+  color: #be123c !important; /* Rose-700 */
+}
+
+/* Light mode card borders & backgrounds */
+html:not(.dark) .border-slate-800,
+html:not(.dark) .border-slate-700,
+html:not(.dark) .border-slate-800\/80,
+html:not(.dark) .border-slate-700\/80,
+html:not(.dark) .border-slate-800\/30 {
+  border-color: #cbd5e1 !important; /* Slate-300 */
+}
+
+html:not(.dark) .bg-slate-900,
+html:not(.dark) .bg-slate-950,
+html:not(.dark) .bg-slate-900\/80,
+html:not(.dark) .bg-slate-950\/60,
+html:not(.dark) .bg-slate-950\/40,
+html:not(.dark) .bg-slate-900\/50,
+html:not(.dark) .bg-slate-900\/20 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .bg-indigo-950\/40,
+html:not(.dark) .bg-indigo-950\/15,
+html:not(.dark) .bg-indigo-950\/20 {
+  background-color: #eef2ff !important;
+  border-color: #c7d2fe !important;
+}
+
+html:not(.dark) .bg-emerald-950\/40,
+html:not(.dark) .bg-emerald-950\/20,
+html:not(.dark) .bg-emerald-950\/15 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+html:not(.dark) .bg-amber-950\/40,
+html:not(.dark) .bg-amber-950\/20,
+html:not(.dark) .bg-amber-950\/15 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+html:not(.dark) .bg-purple-950\/40,
+html:not(.dark) .bg-purple-950\/20,
+html:not(.dark) .bg-purple-950\/15 {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+}
+
+/* Light mode badge backgrounds */
+html:not(.dark) .bg-indigo-500\/20,
+html:not(.dark) .bg-indigo-500\/10 {
+  background-color: #e0e7ff !important;
+  border-color: #a5b4fc !important;
+  color: #3730a3 !important;
+}
+
+html:not(.dark) .bg-emerald-500\/20,
+html:not(.dark) .bg-emerald-500\/15 {
+  background-color: #d1fae5 !important;
+  border-color: #6ee7b7 !important;
+  color: #065f46 !important;
+}
+
+html:not(.dark) .bg-purple-500\/20,
+html:not(.dark) .bg-purple-500\/15 {
+  background-color: #f3e8ff !important;
+  border-color: #d8b4fe !important;
+  color: #6b21a8 !important;
+}
+
+/* Light mode charts & Recharts text/grid styling */
+html:not(.dark) .recharts-text,
+html:not(.dark) .recharts-cartesian-axis-tick-value,
+html:not(.dark) .recharts-legend-item-text,
+html:not(.dark) text[fill="#94a3b8"],
+html:not(.dark) text[fill="#cbd5e1"],
+html:not(.dark) text[fill="#64748b"] {
+  fill: #1e293b !important;
+  color: #1e293b !important;
+  font-weight: 500 !important;
+}
+
+html:not(.dark) .recharts-cartesian-grid line,
+html:not(.dark) line[stroke="#1e293b"],
+html:not(.dark) line[stroke="#334155"] {
+  stroke: #cbd5e1 !important;
+}
+
+html:not(.dark) .recharts-default-tooltip {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Ensure solid action buttons always keep white text */
+button.bg-indigo-600,
+button.bg-purple-600,
+button.bg-emerald-600,
+button.bg-blue-600,
+button.bg-rose-600,
+button.bg-slate-900,
+button.bg-black,
+.bg-indigo-600 button,
+.btn-primary {
+  color: #ffffff !important;
+}
+
+button.bg-indigo-600 *,
+button.bg-purple-600 *,
+button.bg-emerald-600 *,
+button.bg-blue-600 *,
+button.bg-rose-600 *,
+button.bg-slate-900 *,
+button.bg-black * {
+  color: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
 /* ─── DARK MODE CONTRAST & READABILITY GUARANTEES ─────────── */
 /* ═══════════════════════════════════════════════════════════ */
 
