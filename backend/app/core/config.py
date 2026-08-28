@@ -27,13 +27,16 @@ class Settings(BaseModel):
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "mock_secret_84920")
     RAZORPAY_WEBHOOK_SECRET: str = os.getenv("RAZORPAY_WEBHOOK_SECRET", "mock_webhook_secret")
     
-    # EmailJS Configuration (Primary Transactional Provider)
+    # EmailJS Configuration (Primary Transactional Provider & Password Management)
     EMAILJS_SERVICE_ID: str = os.getenv("EMAILJS_SERVICE_ID", "")
     EMAILJS_TEMPLATE_ID: str = os.getenv("EMAILJS_TEMPLATE_ID", "")
     EMAILJS_TEMPLATE_PAYMENT_FAILED_ID: str = os.getenv("EMAILJS_TEMPLATE_PAYMENT_FAILED_ID", "")
     EMAILJS_TEMPLATE_RECOVERY_SUCCESS_ID: str = os.getenv("EMAILJS_TEMPLATE_RECOVERY_SUCCESS_ID", "")
     EMAILJS_TEMPLATE_ACTION_REQUIRED_ID: str = os.getenv("EMAILJS_TEMPLATE_ACTION_REQUIRED_ID", "")
     EMAILJS_TEMPLATE_ADMIN_NOTICE_ID: str = os.getenv("EMAILJS_TEMPLATE_ADMIN_NOTICE_ID", "")
+    EMAILJS_TEMPLATE_PASSWORD_RESET_ID: str = os.getenv("EMAILJS_TEMPLATE_PASSWORD_RESET_ID", "")
+    EMAILJS_TEMPLATE_PASSWORD_MANAGEMENT_ID: str = os.getenv("EMAILJS_TEMPLATE_PASSWORD_MANAGEMENT_ID", "")
+    EMAILJS_TEMPLATE_VERIFY_EMAIL_ID: str = os.getenv("EMAILJS_TEMPLATE_VERIFY_EMAIL_ID", "")
     EMAILJS_PUBLIC_KEY: str = os.getenv("EMAILJS_PUBLIC_KEY", "")
     EMAILJS_PRIVATE_KEY: str = os.getenv("EMAILJS_PRIVATE_KEY", "")
     

@@ -342,3 +342,53 @@ def test_demo_login_endpoint(client):
     assert data["admin"]["id"] == DEMO_ADMIN.id
     assert data["admin"]["email"] == DEMO_ADMIN.email
     assert "token" in data
+
+
+def test_supabase_auth_never_called_during_custom_auth(client):
+    """Test 14: Verify Supabase Auth SDK is never invoked during any auth operations."""
+    with patch("supabase.client.Client.auth", create=True) as mock_sb_auth:
+        # 1. Signup
+        signup_res = client.post(
+            "/api/auth/signup",
+            json={"name": "No Supabase Auth", "email": "nosbauth@example.com", "password": "Password123!"}
+        )
+        assert signup_res.status_code == 200
+
+        # 2. Verify Email
+        user_id = auth_service._email_to_id["nosbauth@example.com"]
+        token = [tok for tok, t in auth_service._verification_tokens.items() if t["email"] == "nosbauth@example.com"][0]
+        verify_res = client.post("/api/auth/verify-email", json={"token": token})
+        assert verify_res.status_code == 200
+
+        # 3. Login
+        login_res = client.post(
+            "/api/auth/login",
+            json={"email": "nosbauth@example.com", "password": "Password123!"}
+        )
+        assert login_res.status_code == 200
+
+        # 4. Forgot password & Reset password
+        client.post("/api/auth/forgot-password", json={"email": "nosbauth@example.com"})
+        reset_token = [tok for tok, t in auth_service._reset_tokens.items() if t["email"] == "nosbauth@example.com"][0]
+        reset_res = client.post("/api/auth/reset-password", json={"token": reset_token, "new_password": "NewPassword123!"})
+        assert reset_res.status_code == 200
+
+        # Assert no Supabase Auth methods were called
+        mock_sb_auth.sign_up.assert_not_called()
+        mock_sb_auth.sign_in_with_password.assert_not_called()
+        mock_sb_auth.reset_password_for_email.assert_not_called()
+        mock_sb_auth.update_user.assert_not_called()
+
+
+def test_emailjs_private_key_never_exposed_in_client_responses(client):
+    """Test 15: Verify private keys, secrets, and password hashes never leak in client responses."""
+    with patch.dict("os.environ", {"EMAILJS_PRIVATE_KEY": "super_secret_private_emailjs_key"}):
+        res_signup = client.post(
+            "/api/auth/signup",
+            json={"name": "Leak Test", "email": "leaktest@example.com", "password": "Password123!"}
+        )
+        body = res_signup.text
+        assert "super_secret_private_emailjs_key" not in body
+        assert "password_hash" not in body
+        assert "pbkdf2" not in body
+

@@ -42,7 +42,25 @@ class EmailJSProvider:
         type_str = email_type.value if isinstance(email_type, EmailType) else str(email_type)
         type_str_lower = type_str.lower()
 
-        if "failed" in type_str_lower:
+        if "reset" in type_str_lower or "password" in type_str_lower:
+            return (
+                os.getenv("EMAILJS_TEMPLATE_PASSWORD_RESET_ID")
+                or getattr(settings, "EMAILJS_TEMPLATE_PASSWORD_RESET_ID", "")
+                or os.getenv("EMAILJS_TEMPLATE_PASSWORD_MANAGEMENT_ID")
+                or getattr(settings, "EMAILJS_TEMPLATE_PASSWORD_MANAGEMENT_ID", "")
+                or os.getenv("EMAILJS_TEMPLATE_ID")
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_password_management")
+            )
+        elif "verify" in type_str_lower or "verification" in type_str_lower:
+            return (
+                os.getenv("EMAILJS_TEMPLATE_VERIFY_EMAIL_ID")
+                or getattr(settings, "EMAILJS_TEMPLATE_VERIFY_EMAIL_ID", "")
+                or os.getenv("EMAILJS_TEMPLATE_VERIFICATION_ID")
+                or getattr(settings, "EMAILJS_TEMPLATE_VERIFICATION_ID", "")
+                or os.getenv("EMAILJS_TEMPLATE_ID")
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_email_verification")
+            )
+        elif "failed" in type_str_lower:
             return (
                 os.getenv("EMAILJS_TEMPLATE_PAYMENT_FAILED_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_PAYMENT_FAILED_ID", "")

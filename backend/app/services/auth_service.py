@@ -222,6 +222,12 @@ class AuthService:
         """
         Sends the single-use verification link to the user's exact registered email address.
         """
+        if not user or not user.email or "@" not in user.email or "." not in user.email.split("@")[-1]:
+            logger.warning("[AuthService] Verification email skipped: Invalid user email.")
+            return {"success": False, "status": "FAILED", "error": "Invalid user email."}
+
+        clean_recipient = user.email.strip().lower()
+
         frontend_base = (
             os.getenv("FRONTEND_PUBLIC_URL", "")
             or getattr(settings, "FRONTEND_PUBLIC_URL", "")
@@ -234,22 +240,24 @@ class AuthService:
         subject = "⚡ Verify your RecoverAI Account"
 
         template_params = {
-            "email": user.email,
-            "to_email": user.email,
-            "recipient_email": user.email,
+            "email": clean_recipient,
+            "to_email": clean_recipient,
+            "recipient_email": clean_recipient,
             "name": user.name,
             "customer_name": user.name,
             "to_name": user.name,
             "verification_link": verification_link,
+            "verify_link": verification_link,
             "update_link": verification_link,
+            "link": verification_link,
             "subject": subject
         }
 
-        logger.info(f"[AuthService] Dispatching email verification to {user.email}")
+        logger.info(f"[AuthService] Dispatching email verification to {clean_recipient}")
 
         if EmailJSProvider.is_configured():
             return EmailJSProvider.send_transactional(
-                to_email=user.email,
+                to_email=clean_recipient,
                 subject=subject,
                 template_params=template_params,
                 email_type="EMAIL_VERIFICATION"
@@ -482,6 +490,12 @@ class AuthService:
         """
         Dispatches password reset instructions exclusively to the user's registered email.
         """
+        if not user or not user.email or "@" not in user.email or "." not in user.email.split("@")[-1]:
+            logger.warning("[AuthService] Password reset email skipped: Invalid user email.")
+            return {"success": False, "status": "FAILED", "error": "Invalid user email."}
+
+        clean_recipient = user.email.strip().lower()
+
         frontend_base = (
             os.getenv("FRONTEND_PUBLIC_URL", "")
             or getattr(settings, "FRONTEND_PUBLIC_URL", "")
@@ -494,22 +508,25 @@ class AuthService:
         subject = "⚡ Reset your RecoverAI Password"
 
         template_params = {
-            "email": user.email,
-            "to_email": user.email,
-            "recipient_email": user.email,
+            "email": clean_recipient,
+            "to_email": clean_recipient,
+            "recipient_email": clean_recipient,
             "name": user.name,
             "customer_name": user.name,
             "to_name": user.name,
             "reset_link": reset_link,
+            "password_reset_link": reset_link,
+            "verification_link": reset_link,
             "update_link": reset_link,
+            "link": reset_link,
             "subject": subject
         }
 
-        logger.info(f"[AuthService] Dispatching password reset email to {user.email}")
+        logger.info(f"[AuthService] Dispatching password reset email to {clean_recipient}")
 
         if EmailJSProvider.is_configured():
             return EmailJSProvider.send_transactional(
-                to_email=user.email,
+                to_email=clean_recipient,
                 subject=subject,
                 template_params=template_params,
                 email_type="PASSWORD_RESET"
