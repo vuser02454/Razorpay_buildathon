@@ -145,7 +145,45 @@ class EmailService:
                 "diagnostic_error": "Regex validation failed for recipient email address."
             }
 
-        # 2. Live Gmail SMTP dispatch if credentials configured
+        # 2. Check if Brevo HTTPS API key is provided in smtp_password
+        if smtp_password and smtp_password.strip().startswith("xsmtpsib-"):
+            try:
+                import httpx
+                payload = {
+                    "sender": {"name": sender_name, "email": sender_email or smtp_user},
+                    "to": [{"email": to_email}],
+                    "subject": subject,
+                    "htmlContent": html_content,
+                    "textContent": text_content or subject
+                }
+                headers = {
+                    "api-key": smtp_password.strip(),
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+                resp = httpx.post("https://api.brevo.com/v3/smtp/email", json=payload, headers=headers, timeout=12)
+                if resp.status_code in [200, 201]:
+                    msg_id = resp.json().get("messageId", f"brevo_https_{uuid.uuid4().hex[:12]}")
+                    print(f"[EmailService] [Logging] event=https_api_dispatch type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} status=SENT msg_id={msg_id}")
+                    return {
+                        "success": True,
+                        "email_type": type_str,
+                        "recipient": to_email,
+                        "message_id": msg_id,
+                        "provider": "brevo",
+                        "timestamp": now_str,
+                        "status": "SENT",
+                        "mode": "live",
+                        "error": None,
+                        "diagnostic_error": None
+                    }
+                else:
+                    err_detail = resp.text
+                    print(f"[EmailService] [Logging] event=https_api_error status_code={resp.status_code} detail={err_detail}")
+            except Exception as http_err:
+                print(f"[EmailService] [Logging] event=https_api_exception error={str(http_err)}")
+
+        # 3. Live Gmail SMTP dispatch if credentials configured
         if smtp_user and smtp_password and smtp_user.strip() and smtp_password.strip():
             server = None
             try:
