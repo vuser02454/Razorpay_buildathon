@@ -180,7 +180,24 @@ class EmailService:
                     }
                 else:
                     err_detail = resp.text
+                    try:
+                        err_json = resp.json()
+                        err_detail = err_json.get("message", err_detail)
+                    except Exception:
+                        pass
                     print(f"[EmailService] [Logging] event=https_api_error status_code={resp.status_code} detail={err_detail}")
+                    return {
+                        "success": False,
+                        "email_type": type_str,
+                        "recipient": to_email,
+                        "message_id": None,
+                        "provider": "brevo",
+                        "timestamp": now_str,
+                        "status": "FAILED",
+                        "mode": "live",
+                        "error": f"Email relay error: {err_detail}",
+                        "diagnostic_error": f"Brevo HTTP {resp.status_code}: {err_detail}"
+                    }
             except Exception as http_err:
                 print(f"[EmailService] [Logging] event=https_api_exception error={str(http_err)}")
 
