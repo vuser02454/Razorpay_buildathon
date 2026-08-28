@@ -190,22 +190,7 @@ class EmailService:
                     "diagnostic_error": None
                 }
             except smtplib.SMTPAuthenticationError as auth_err:
-                print(f"[EmailService] [Logging] event=smtp_auth_error type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false error_code=AUTH_FAILED")
-                is_demo = os.getenv("IS_DEMO_MODE", "false").lower() == "true"
-                if is_demo:
-                    mock_msg_id = f"gmail_demo_{uuid.uuid4().hex[:12]}"
-                    return {
-                        "success": True,
-                        "email_type": type_str,
-                        "recipient": to_email,
-                        "message_id": mock_msg_id,
-                        "provider": "gmail (Sandbox Mode)",
-                        "timestamp": now_str,
-                        "status": "SENT",
-                        "mode": "sandbox",
-                        "error": None,
-                        "diagnostic_error": "Gmail credentials invalid. Operating in simulated sandbox mode."
-                    }
+                print(f"[EmailService] [Logging] event=smtp_auth_error type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false error_code=AUTH_FAILED diagnostic={str(auth_err)}")
                 return {
                     "success": False,
                     "email_type": type_str,
@@ -215,26 +200,11 @@ class EmailService:
                     "timestamp": now_str,
                     "status": "FAILED",
                     "mode": "live",
-                    "error": "We couldn't send your email right now. Please try again.",
-                    "diagnostic_error": "Gmail SMTP authentication failed. Please verify App Password."
+                    "error": "Gmail SMTP authentication failed. Please verify your 16-character App Password.",
+                    "diagnostic_error": "Gmail SMTP 535 Authentication Failed: Please verify GMAIL_SMTP_USER and 16-character Google App Password in Render environment variables."
                 }
             except (smtplib.SMTPConnectError, socket.timeout, ConnectionRefusedError, OSError) as conn_err:
-                print(f"[EmailService] [Logging] event=smtp_connection_error type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false error_code=CONN_FAILED")
-                is_demo = os.getenv("IS_DEMO_MODE", "false").lower() == "true"
-                if is_demo:
-                    mock_msg_id = f"gmail_sandbox_{uuid.uuid4().hex[:12]}"
-                    return {
-                        "success": True,
-                        "email_type": type_str,
-                        "recipient": to_email,
-                        "message_id": mock_msg_id,
-                        "provider": "gmail (Simulated Sandbox)",
-                        "timestamp": now_str,
-                        "status": "SENT",
-                        "mode": "sandbox",
-                        "error": None,
-                        "diagnostic_error": f"Simulated sandbox delivery: Could not reach {smtp_host}:{smtp_port}."
-                    }
+                print(f"[EmailService] [Logging] event=smtp_connection_error type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false error_code=CONN_FAILED diagnostic={str(conn_err)}")
                 return {
                     "success": False,
                     "email_type": type_str,
@@ -244,8 +214,8 @@ class EmailService:
                     "timestamp": now_str,
                     "status": "FAILED",
                     "mode": "live",
-                    "error": "We couldn't send your email right now. Please try again.",
-                    "diagnostic_error": f"Failed to connect to SMTP relay ({smtp_host}:{smtp_port})."
+                    "error": f"Could not connect to Gmail SMTP relay ({smtp_host}:{smtp_port}).",
+                    "diagnostic_error": f"Failed to connect to SMTP relay ({smtp_host}:{smtp_port}): {str(conn_err)}"
                 }
             except Exception as exc:
                 print(f"[EmailService] [Logging] event=smtp_unexpected_error type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false diagnostic_error={str(exc)}")
@@ -268,20 +238,82 @@ class EmailService:
                     except Exception:
                         pass
 
-        # 3. Simulated Sandbox Delivery when Gmail credentials are not set
-        mock_msg_id = f"gmail_sandbox_{uuid.uuid4().hex[:12]}"
-        print(f"[EmailService] [Logging] event=smtp_sandbox_simulation type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=true mode=sandbox")
+        # 3. Missing Gmail SMTP Credentials in Production
+        print(f"[EmailService] [Logging] event=smtp_credentials_missing type={type_str} recipient_domain={recipient_domain} sender_domain={sender_domain} smtp_accepted=false")
         return {
-            "success": True,
+            "success": False,
             "email_type": type_str,
             "recipient": to_email,
-            "message_id": mock_msg_id,
-            "provider": "gmail (Simulated Sandbox)",
+            "message_id": None,
+            "provider": "gmail",
             "timestamp": now_str,
-            "status": "SENT",
-            "mode": "sandbox",
-            "error": None,
-            "diagnostic_error": "Gmail SMTP credentials not configured. Running in simulated sandbox mode."
+            "status": "FAILED",
+            "mode": "unconfigured",
+            "error": "Gmail SMTP credentials not configured on the backend server.",
+            "diagnostic_error": "GMAIL_SMTP_USER and GMAIL_SMTP_PASSWORD environment variables are missing on the backend. Please configure them in your Render dashboard."
+        }
+
+    @classmethod
+    def get_smtp_diagnostics(cls) -> Dict[str, Any]:
+        """
+        Safe production runtime diagnostics for Gmail SMTP.
+        Zero exposure of passwords, tokens, or private secrets.
+        """
+        smtp_host = os.getenv("GMAIL_SMTP_HOST", "") or getattr(settings, "GMAIL_SMTP_HOST", "smtp.gmail.com")
+        smtp_port = int(os.getenv("GMAIL_SMTP_PORT", 0) or getattr(settings, "GMAIL_SMTP_PORT", 587))
+        smtp_user = os.getenv("GMAIL_SMTP_USER", "") or getattr(settings, "GMAIL_SMTP_USER", "")
+        smtp_password = os.getenv("GMAIL_SMTP_PASSWORD", "") or getattr(settings, "GMAIL_SMTP_PASSWORD", "")
+        sender_email = os.getenv("GMAIL_SENDER_EMAIL", "") or getattr(settings, "GMAIL_SENDER_EMAIL", "") or smtp_user
+        sender_name = os.getenv("GMAIL_SENDER_NAME", "") or getattr(settings, "GMAIL_SENDER_NAME", "RecoverAI")
+
+        has_user = bool(smtp_user and smtp_user.strip())
+        has_password = bool(smtp_password and smtp_password.strip())
+        is_live_ready = has_user and has_password
+
+        sender_domain = sender_email.split("@")[-1] if "@" in sender_email else "not_configured"
+        user_domain = smtp_user.split("@")[-1] if "@" in smtp_user else "not_configured"
+
+        connection_status = "untested"
+        auth_status = "untested"
+        diagnostic_message = "Ready for live dispatch" if is_live_ready else "GMAIL_SMTP_USER or GMAIL_SMTP_PASSWORD missing in production environment"
+
+        if is_live_ready:
+            try:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                connection_status = "connected"
+                try:
+                    server.login(smtp_user.strip(), smtp_password.strip())
+                    auth_status = "authenticated"
+                    diagnostic_message = "Gmail SMTP connection and authentication verified"
+                except smtplib.SMTPAuthenticationError:
+                    auth_status = "auth_failed"
+                    diagnostic_message = "Gmail SMTP authentication failed. Check 16-char App Password."
+                finally:
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
+            except Exception as conn_err:
+                connection_status = "failed"
+                diagnostic_message = f"Failed to connect to {smtp_host}:{smtp_port}: {str(conn_err)}"
+
+        return {
+            "smtp_host": smtp_host,
+            "smtp_port": smtp_port,
+            "has_smtp_user": has_user,
+            "has_smtp_password": has_password,
+            "has_sender_email": bool(sender_email),
+            "sender_domain": sender_domain,
+            "user_domain": user_domain,
+            "sender_name": sender_name,
+            "is_live_ready": is_live_ready,
+            "connection_status": connection_status,
+            "auth_status": auth_status,
+            "diagnostic_message": diagnostic_message,
+            "is_demo_mode": os.getenv("IS_DEMO_MODE", "false").lower() == "true"
         }
 
     @classmethod

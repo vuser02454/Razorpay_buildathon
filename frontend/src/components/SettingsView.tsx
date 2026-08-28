@@ -34,14 +34,14 @@ export const SettingsView: React.FC = () => {
       const res = await api.sendTestEmail(testEmailAddress);
       if (res.success) {
         setEmailSendingStatus('success');
-        setEmailFeedbackMsg('Email sent successfully');
+        setEmailFeedbackMsg(res.message || 'Email sent successfully via Gmail SMTP.');
       } else {
         setEmailSendingStatus('error');
-        setEmailFeedbackMsg('Email could not be sent');
+        setEmailFeedbackMsg(res.message || 'Email could not be sent. Please check SMTP configuration.');
       }
     } catch (err: any) {
       setEmailSendingStatus('error');
-      setEmailFeedbackMsg('Email could not be sent');
+      setEmailFeedbackMsg(err.message || 'Network error connecting to backend API.');
     }
   };
 
