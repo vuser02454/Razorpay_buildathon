@@ -6,7 +6,7 @@
 > **Live Web Application:** [https://razorpay-buildathon-ivory.vercel.app](https://razorpay-buildathon-ivory.vercel.app)  
 > **Live Backend API (Render):** [https://razorpay-buildathon-rvgj.onrender.com](https://razorpay-buildathon-rvgj.onrender.com)  
 > **Target Demo Artifact:** [https://share.google/IhXXtpGBbnNE8J5DV](https://share.google/IhXXtpGBbnNE8J5DV)  
-> **Tech Stack:** React 19 • TypeScript • Tailwind CSS v4 • FastAPI • XGBoost • SHAP • LangGraph StateGraph • Celery + Redis • Supabase Auth & PostgreSQL • Razorpay API & Mock Sandbox • Gmail SMTP & HTTPS REST Relay • Google Gemini • Groq LPU • OpenRouter  
+> **Tech Stack:** React 19 • TypeScript • Tailwind CSS v4 • FastAPI • XGBoost • SHAP • LangGraph StateGraph • Celery + Redis • Supabase PostgreSQL • Custom Session Auth (PBKDF2) • EmailJS REST API • Gmail SMTP & HTTPS Relay • Google Gemini • Groq LPU • OpenRouter  
 
 ---
 
@@ -31,33 +31,33 @@ Traditional dunning tools execute naive recovery routines:
 
 ---
 
-## 🏛️ 2. Architectural Separation: Supabase Auth vs. Transactional Email
+## 🏛️ 2. Authentication & Session Architecture
 
-RecoverAI strictly enforces an architectural boundary separating user authentication from customer transactional business emails:
+RecoverAI uses a **server-controlled custom session authentication architecture** backed by **Supabase PostgreSQL** and **EmailJS REST API $\rightarrow$ Gmail**:
 
 ```
                           RECOVERAI
                               │
               ┌───────────────┴───────────────┐
               ▼                               ▼
-        SUPABASE AUTH                 TRANSACTIONAL EMAIL
-    (AUTHENTICATION ONLY)           (CUSTOMER DUNNING ONLY)
+       BACKEND AUTH AUTHORITY          TRANSACTIONAL DELIVERY
+    (PBKDF2 + HTTP-ONLY SESSIONS)      (EMAILJS REST API / GMAIL)
               │                               │
               ▼                               ▼
-       Identity & Access               Business Emails
+     Supabase PostgreSQL                  Gmail Relay
               │                               │
       ┌───────┴───────┐               ┌───────┴───────┐
       │               │               │               │
   Verify Email    Password         Payment        Recovery
-  Admin Sign-In    Reset           Failure        Receipt
+  (Single-Use)     Reset           Failure        Receipt
       │               │               │               │
       └───────────────┘               └───────────────┘
 ```
 
 | Domain | Responsible Engine | Key Operations |
 |---|---|---|
-| **Authentication & Identity** | **Supabase Auth** | Admin registration, login, email verification, password reset, session/JWT token lifecycle, logout. Authentication emails are delivered **exclusively via Supabase Auth**. |
-| **Transactional Customer Delivery** | **Central Email Service** | Payment failure dunning notices, smart retry alerts, 1-click customer payment update emails, recovery confirmation receipts, and Razorpay onboarding OTPs. Delivered via `smtp.gmail.com:587` with STARTTLS, `port 465` SSL, and `port 443` HTTPS REST API relay. |
+| **Authentication & Sessions** | **RecoverAI Backend (`AuthService`)** | Admin registration, PBKDF2-HMAC-SHA256 password hashing (100k rounds), single-use email verification tokens (24h), single-use password reset tokens (1h), HTTP-only secure cookie sessions (`recoverai_session`), and Supabase PostgreSQL persistence (`users` table). |
+| **Transactional Email Delivery** | **EmailJS REST API & Gmail Relay** | Verification links, password reset instructions, payment failure dunning notices, smart retry alerts, 1-click payment update links, and recovery receipts. |
 
 ---
 
