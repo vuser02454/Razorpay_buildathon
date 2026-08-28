@@ -145,19 +145,20 @@ class EmailService:
                 "diagnostic_error": "Regex validation failed for recipient email address."
             }
 
-        # 2. Check if Brevo HTTPS API key is provided in smtp_password
-        if smtp_password and smtp_password.strip().startswith("xsmtpsib-"):
+        # 2. Check if Brevo HTTPS API key is provided (bypasses Render SMTP port blocks over port 443)
+        brevo_key = os.getenv("BREVO_API_KEY", "") or (smtp_password if smtp_password and smtp_password.strip().startswith("xsmtpsib-") else "")
+        if brevo_key and brevo_key.strip():
             try:
                 import httpx
                 payload = {
-                    "sender": {"name": sender_name, "email": sender_email or smtp_user},
+                    "sender": {"name": sender_name, "email": sender_email or smtp_user or "support@recoverai.ai"},
                     "to": [{"email": to_email}],
                     "subject": subject,
                     "htmlContent": html_content,
                     "textContent": text_content or subject
                 }
                 headers = {
-                    "api-key": smtp_password.strip(),
+                    "api-key": brevo_key.strip(),
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 }
