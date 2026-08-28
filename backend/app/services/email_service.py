@@ -391,11 +391,26 @@ class EmailService:
         sender_domain = sender_email.split("@")[-1] if "@" in sender_email else "not_configured"
         user_domain = smtp_user.split("@")[-1] if "@" in smtp_user else "not_configured"
 
-        connection_status = "connected" if has_https_relay else "untested"
-        auth_status = "authenticated" if has_https_relay else "untested"
+        connection_status = "untested"
+        auth_status = "untested"
         diagnostic_message = "Ready for live transactional dispatch (HTTPS Relay / SMTP)" if is_live_ready else "GMAIL_SMTP_USER or GMAIL_SMTP_PASSWORD missing in production environment"
 
-        if is_live_ready:
+        if has_https_relay:
+            try:
+                import httpx
+                resp = httpx.get("https://api.brevo.com/v3/account", headers={"api-key": brevo_key.strip()}, timeout=6)
+                if resp.status_code == 200:
+                    connection_status = "connected"
+                    auth_status = "authenticated"
+                    diagnostic_message = "Brevo HTTPS Cloud Relay (Port 443) connected & authenticated"
+                else:
+                    connection_status = "connected"
+                    auth_status = "auth_failed"
+                    diagnostic_message = f"Brevo API returned status {resp.status_code}: Please verify BREVO_API_KEY."
+            except Exception as http_err:
+                connection_status = "failed"
+                diagnostic_message = f"HTTPS relay connection error: {str(http_err)}"
+        elif is_live_ready:
             try:
                 try:
                     server = smtplib.SMTP(smtp_host, smtp_port, timeout=6)
