@@ -56,20 +56,18 @@ async def request_razorpay_verification(
             expires_in_minutes=5
         )
         if not email_res.get("success", False):
-            # Check mode: in simulated sandbox or if email was sent in test mode, proceed
-            if email_res.get("mode") not in ["sandbox", "live"]:
-                return RazorpayVerificationResponse(
-                    success=False,
-                    message="Unable to send verification code. Please try again in a moment.",
-                    masked_email=masked_email,
-                    resend_cooldown_seconds=0
-                )
+            err_msg = email_res.get("error") or "Unable to send verification code. Please check SMTP settings."
+            return RazorpayVerificationResponse(
+                success=False,
+                message=err_msg,
+                masked_email=masked_email,
+                resend_cooldown_seconds=0
+            )
     except Exception as e:
-        # Internal log only - NEVER leak technical traceback to merchant frontend
-        print(f"[RazorpayVerification] [Internal Log] Dispatch error: {type(e).__name__}")
+        print(f"[RazorpayVerification] [Internal Log] Dispatch error: {type(e).__name__}: {str(e)}")
         return RazorpayVerificationResponse(
             success=False,
-            message="Unable to send verification code. Please try again in a moment.",
+            message="Unable to send verification code. Please check backend SMTP connection.",
             masked_email=masked_email,
             resend_cooldown_seconds=0
         )
