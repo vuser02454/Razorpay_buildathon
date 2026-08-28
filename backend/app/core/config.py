@@ -37,7 +37,8 @@ class Settings(BaseModel):
     EMAILJS_PUBLIC_KEY: str = os.getenv("EMAILJS_PUBLIC_KEY", "")
     EMAILJS_PRIVATE_KEY: str = os.getenv("EMAILJS_PRIVATE_KEY", "")
     
-    # Gmail SMTP Configuration (Fallback Transactional Business Emails Only)
+    # Gmail / Brevo SMTP & HTTPS Relay Configuration
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "")
     GMAIL_SMTP_HOST: str = os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com")
     GMAIL_SMTP_PORT: int = int(os.getenv("GMAIL_SMTP_PORT", "587"))
     GMAIL_SMTP_USER: str = os.getenv("GMAIL_SMTP_USER", "")
