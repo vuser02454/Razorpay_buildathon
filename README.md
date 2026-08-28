@@ -132,8 +132,8 @@ Razorpay   Gmail / HTTPS Relay         Admin Review   Safety Lock
 
 ### 7-Node Autonomous Pipeline:
 1. **`classify_failure_node`**: Normalizes gateway error codes into failure archetypes (*Soft Decline, Insufficient Funds, Expired Card, Network Timeout, Stolen/Hard Decline*).
-2. **`recovery_probability_node`**: Computes recovery probability ($0.00 – 1.00$) and confidence score using calibrated weights across amount risk tier, decline history, time-of-month, and past success rate.
-3. **`policy_gate_node`**: Deterministic rule verification:
+2. **`recovery_probability_node`**: Executes the trained **XGBoost Recovery Model** (`xgboost_v1`) with **Platt Scaling (Sigmoid Calibration)** across 11 point-in-time features, computing calibrated recovery probability ($0.00 – 1.00$) and extracting exact Shapley feature attributions via **SHAP TreeExplainer**.
+3. **`policy_gate_node`**: Deterministic rule verification (Authoritative safety gates that override ML predictions):
    - *Stolen / Lost Cards* $\rightarrow$ Immediate Lockout (`STOP`).
    - *Card Expired* $\rightarrow$ Forced Customer Dunning (`CUSTOMER_ACTION`).
    - *Max Retries Exceeded (3)* $\rightarrow$ Final Grace Stop (`STOP`).
@@ -142,6 +142,8 @@ Razorpay   Gmail / HTTPS Relay         Admin Review   Safety Lock
 5. **`retry_action_node`**: Schedules tokenized retry aligned with banking liquidity clearing cycles (e.g. 09:30 AM / 02:00 PM).
 6. **`communication_node`**: Generates failure-specific copy via Google Gemini and dispatches secure 1-click update emails.
 7. **`outcome_node`**: Updates payment status (`RECOVERED`, `ACTION_REQUIRED`, `RETRY_SCHEDULED`, `FAILED`), emits telemetry, and writes immutable audit trail logs.
+
+> **XAI Invariant**: XGBoost estimates the probability that a failed payment can be recovered. SHAP provides local feature-level explanations for the model prediction. Deterministic safety policies remain authoritative and can override the model.
 
 ---
 

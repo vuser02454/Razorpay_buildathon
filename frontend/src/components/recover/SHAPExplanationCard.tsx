@@ -109,7 +109,7 @@ export const SHAPExplanationCard: React.FC<SHAPExplanationCardProps> = ({
               Why did AI choose this?
             </h4>
             <div className="text-[10px] font-mono text-slate-400">
-              SHAP TreeExplainer &bull; {explanation.model_version}
+              XGBoost &bull; SHAP TreeExplainer &bull; {explanation.model_version}
             </div>
           </div>
         </div>

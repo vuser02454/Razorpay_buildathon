@@ -1,0 +1,52 @@
+{
+  "model_name": "XGBoost Recovery Probability Classifier",
+  "model_version": "xgboost_v1",
+  "trained_at": "2026-08-28T21:47:28.896628+00:00",
+  "algorithm": "XGBoost + Platt Calibration (Sigmoid)",
+  "feature_schema_version": "v1.0",
+  "num_features": 11,
+  "features": [
+    "customer_payment_history",
+    "failure_type",
+    "retry_count",
+    "successful_payment_count",
+    "days_since_last_success",
+    "customer_tenure",
+    "transaction_amount",
+    "previous_failure_count",
+    "payment_method",
+    "time_since_failure",
+    "historical_recovery_rate"
+  ],
+  "dataset": {
+    "total_records": 1200,
+    "train_records": 840,
+    "val_records": 180,
+    "test_records": 180,
+    "recovered_rate": 0.56,
+    "split_type": "temporal_ordered"
+  },
+  "hyperparameters": {
+    "n_estimators": 45,
+    "max_depth": 3,
+    "learning_rate": 0.08,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "objective": "binary:logistic",
+    "eval_metric": "logloss",
+    "random_state": 42
+  },
+  "metrics": {
+    "roc_auc": 0.73,
+    "pr_auc": 0.7175,
+    "brier_score": 0.2054,
+    "log_loss": 0.5989,
+    "accuracy": 0.6667,
+    "precision": 0.6535,
+    "recall": 0.8384,
+    "f1_score": 0.7345,
+    "expected_calibration_error": 0.0547,
+    "calibrated_base_probability": 0.5689
+  },
+  "explainer": "SHAP TreeExplainer (shap.TreeExplainer)"
+}

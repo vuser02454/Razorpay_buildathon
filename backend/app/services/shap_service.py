@@ -1,9 +1,19 @@
+import os
 import math
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
+import joblib
+
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.calibration import CalibratedClassifierCV
 import shap
 
 from app.models.schemas import (
@@ -15,10 +25,13 @@ from app.models.schemas import (
 
 logger = logging.getLogger("recoverai.shap")
 
+ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ml_artifacts")
+
+
 class SHAPRecoveryExplainer:
     """
     Explainable AI (XAI) Service for RecoverAI:
-    Uses a calibrated tree-based ML model and SHAP (SHapley Additive exPlanations)
+    Uses a calibrated XGBoost ML model and SHAP (SHapley Additive exPlanations)
     TreeExplainer to attribute exact, mathematically grounded feature contributions
     to the payment recovery probability prediction.
 
@@ -27,7 +40,7 @@ class SHAPRecoveryExplainer:
     safety decisions (e.g., stolen cards, expired credentials, RBI compliance rules).
     """
 
-    MODEL_VERSION = "recovery-model-v1"
+    MODEL_VERSION = "xgboost_v1"
 
     # Human-readable feature display names
     FEATURE_DISPLAY_NAMES = {
@@ -76,7 +89,8 @@ class SHAPRecoveryExplainer:
     }
 
     _instance = None
-    _model: Optional[GradientBoostingClassifier] = None
+    _model: Optional[Any] = None
+    _calibrated_clf: Optional[Any] = None
     _explainer: Optional[shap.TreeExplainer] = None
     _base_probability: float = 0.51
 
@@ -88,34 +102,71 @@ class SHAPRecoveryExplainer:
 
     def _init_model_and_explainer(self):
         """
-        Initializes and trains the calibrated Gradient Boosting classifier on
-        representative payment failure & recovery distribution trajectories,
+        Initializes the calibrated XGBoost model from exported disk artifacts,
+        or dynamically trains and calibrates on baseline recovery distribution trajectories,
         and constructs the SHAP TreeExplainer.
         """
+        try:
+            pipeline_path = os.path.join(ARTIFACTS_DIR, "calibrated_pipeline.joblib")
+            if os.path.exists(pipeline_path):
+                pipeline = joblib.load(pipeline_path)
+                self._model = pipeline.get("base_model")
+                self._calibrated_clf = pipeline.get("calibrated_classifier")
+                self._base_probability = float(pipeline.get("base_probability", 0.51))
+                logger.info(f"[SHAPRecoveryExplainer] Loaded trained {self.MODEL_VERSION} from artifacts.")
+            else:
+                self._train_and_initialize_fallback()
+
+            if self._model is not None:
+                self._explainer = shap.TreeExplainer(self._model)
+                logger.info(f"[SHAPRecoveryExplainer] Initialized SHAP TreeExplainer (Base probability: {self._base_probability:.2f})")
+        except Exception as e:
+            logger.error(f"[SHAPRecoveryExplainer] Failed to initialize SHAP TreeExplainer: {e}", exc_info=True)
+            self._train_and_initialize_fallback()
+
+    def _train_and_initialize_fallback(self):
+        """Fallback in-memory training of calibrated XGBoost / GradientBoosting model."""
         try:
             training_data = self._generate_training_dataset()
             X_train = training_data[self.FEATURE_COLUMNS]
             y_train = training_data["recovered"]
 
-            self._model = GradientBoostingClassifier(
-                n_estimators=35,
-                learning_rate=0.1,
-                max_depth=3,
-                random_state=42
-            )
+            if XGBOOST_AVAILABLE:
+                self._model = xgb.XGBClassifier(
+                    n_estimators=45,
+                    max_depth=3,
+                    learning_rate=0.08,
+                    subsample=0.85,
+                    colsample_bytree=0.85,
+                    objective="binary:logistic",
+                    eval_metric="logloss",
+                    random_state=42
+                )
+            else:
+                self._model = GradientBoostingClassifier(
+                    n_estimators=35,
+                    learning_rate=0.1,
+                    max_depth=3,
+                    random_state=42
+                )
+
             self._model.fit(X_train, y_train)
 
+            # Fit Platt calibration
+            self._calibrated_clf = CalibratedClassifierCV(estimator=self._model, method="sigmoid", cv=3)
+            self._calibrated_clf.fit(X_train, y_train)
+
             self._explainer = shap.TreeExplainer(self._model)
-            
-            baseline_pred = self._model.predict_proba(X_train)[:, 1]
+            baseline_pred = self._calibrated_clf.predict_proba(X_train)[:, 1]
             self._base_probability = float(round(float(np.mean(baseline_pred)), 2))
             if self._base_probability == 0.0:
                 self._base_probability = 0.51
 
-            logger.info(f"[SHAPRecoveryExplainer] Initialized {self.MODEL_VERSION} (Baseline: {self._base_probability:.2f})")
+            logger.info(f"[SHAPRecoveryExplainer] Trained in-memory {self.MODEL_VERSION} (Baseline: {self._base_probability:.2f})")
         except Exception as e:
-            logger.error(f"[SHAPRecoveryExplainer] Failed to initialize SHAP TreeExplainer: {e}", exc_info=True)
+            logger.error(f"[SHAPRecoveryExplainer] In-memory training failed: {e}", exc_info=True)
             self._model = None
+            self._calibrated_clf = None
             self._explainer = None
 
     def _generate_training_dataset(self) -> pd.DataFrame:
@@ -124,24 +175,25 @@ class SHAPRecoveryExplainer:
         """
         np.random.seed(42)
         records = []
-        for _ in range(600):
-            hist = np.random.uniform(0.40, 0.98)
-            ft = np.random.choice([0, 1, 2, 3, 4, 5], p=[0.42, 0.22, 0.14, 0.10, 0.08, 0.04])
-            retries = np.random.choice([0, 1, 2, 3], p=[0.55, 0.25, 0.12, 0.08])
-            succ = np.random.randint(1, 15)
-            days_succ = np.random.uniform(1, 60)
-            tenure = np.random.randint(1, 30)
-            amount = np.random.choice([500, 1000, 2000, 3000, 5000, 10000, 15000, 25000])
-            prev_fail = np.random.choice([0, 1, 2], p=[0.6, 0.3, 0.1])
-            pm = np.random.choice([0, 1, 2, 3])
-            time_fail = np.random.uniform(0.5, 24.0)
-            hist_rec = np.random.uniform(0.3, 0.9)
-            
-            ft_weights = {0: 0.76, 1: 0.88, 2: 0.62, 3: 0.44, 4: 0.15, 5: 0.02}
+        ft_weights = {0: 0.74, 1: 0.86, 2: 0.58, 3: 0.42, 4: 0.16, 5: 0.02}
+
+        for _ in range(800):
+            hist = float(np.random.uniform(0.40, 0.98))
+            ft = int(np.random.choice([0, 1, 2, 3, 4, 5], p=[0.42, 0.22, 0.14, 0.10, 0.08, 0.04]))
+            retries = int(np.random.choice([0, 1, 2, 3], p=[0.55, 0.25, 0.12, 0.08]))
+            succ = int(np.random.randint(1, 15))
+            days_succ = float(np.random.uniform(1, 60))
+            tenure = int(np.random.randint(1, 30))
+            amount = float(np.random.choice([500, 1000, 2000, 3000, 5000, 10000, 15000, 25000]))
+            prev_fail = int(np.random.choice([0, 1, 2], p=[0.6, 0.3, 0.1]))
+            pm = int(np.random.choice([0, 1, 2, 3]))
+            time_fail = float(np.random.uniform(0.5, 24.0))
+            hist_rec = float(np.random.uniform(0.3, 0.9))
+
             base = ft_weights[ft]
-            prob = base + (hist - 0.88)*0.45 + min(0.08, tenure/30.0 * 0.08) - retries*0.14 - (0.07 if amount > 10000 else 0)
-            prob = max(0.02, min(0.98, prob))
-            y = np.random.binomial(1, prob)
+            prob = base + (hist - 0.88) * 0.45 + min(0.08, tenure / 30.0 * 0.08) - retries * 0.14 - (0.07 if amount > 10000 else 0)
+            prob = float(max(0.02, min(0.98, prob)))
+            y = int(np.random.binomial(1, prob))
             records.append([hist, ft, retries, succ, days_succ, tenure, amount, prev_fail, pm, time_fail, hist_rec, y])
 
         cols = self.FEATURE_COLUMNS + ["recovered"]
@@ -149,7 +201,7 @@ class SHAPRecoveryExplainer:
 
         # Include calibrated archetype samples (Rahul Sharma archetype)
         for _ in range(30):
-            df.loc[len(df)] = [0.94, 0, 0, 12, 28.0, 14, 2000.0, 0, 0, 1.5, 0.88, np.random.binomial(1, 0.74)]
+            df.loc[len(df)] = [0.94, 0, 0, 12, 28.0, 14, 2000.0, 0, 0, 1.5, 0.88, int(np.random.binomial(1, 0.74))]
 
         return df
 
@@ -165,7 +217,7 @@ class SHAPRecoveryExplainer:
         """
         cust = customer or payment.get("customer") or {}
         fail_info = payment.get("failure") or {}
-        
+
         # Determine failure type key
         ft = failure_type_str or payment.get("failure_type") or fail_info.get("failure_type", "SOFT_DECLINE")
         if isinstance(ft, FailureType):
@@ -227,8 +279,8 @@ class SHAPRecoveryExplainer:
         failure_type_str: Optional[str] = None
     ) -> SHAPExplanationResponse:
         """
-        Executes the SHAP TreeExplainer on the payment vector and constructs
-        a human-readable, ranked feature attribution response.
+        Executes the calibrated XGBoost inference and SHAP TreeExplainer on the
+        payment vector and constructs a human-readable, ranked feature attribution response.
         """
         if self._model is None or self._explainer is None:
             return SHAPExplanationResponse(
@@ -241,15 +293,19 @@ class SHAPRecoveryExplainer:
         try:
             X_df, raw_display_values = self.extract_features(payment, customer, failure_type_str)
 
-            # 1. Model Prediction
-            prob_array = self._model.predict_proba(X_df)[0]
+            # 1. Model Prediction via Calibrated Classifier (or base model if calibrated is unavailable)
+            if self._calibrated_clf is not None:
+                prob_array = self._calibrated_clf.predict_proba(X_df)[0]
+            else:
+                prob_array = self._model.predict_proba(X_df)[0]
+
             recovery_prob = float(prob_array[1])
             recovery_prob = max(0.01, min(0.99, recovery_prob))
             recovery_prob_pct = int(round(recovery_prob * 100))
 
-            # 2. SHAP Values
+            # 2. SHAP Values via TreeExplainer on base XGBoost tree model
             raw_shap_values = self._explainer.shap_values(X_df)
-            
+
             # TreeExplainer for binary classifier returns either (1, features) or list of 2 arrays
             if isinstance(raw_shap_values, list) and len(raw_shap_values) == 2:
                 feature_shap = raw_shap_values[1][0]
@@ -283,7 +339,7 @@ class SHAPRecoveryExplainer:
                 val_raw = X_df[col].iloc[0]
                 val_disp = raw_display_values.get(col, str(val_raw))
                 s_val = float(scaled_shap[idx])
-                
+
                 # Determine impact
                 if s_val > 0.008:
                     impact = "positive"
@@ -302,7 +358,7 @@ class SHAPRecoveryExplainer:
                     shap_value=round(s_val, 4),
                     impact=impact,
                     impact_percent=pct,
-                    rank=0 # Will assign after sorting
+                    rank=0  # Will assign after sorting
                 ))
 
             # Sort by absolute SHAP impact descending
@@ -361,14 +417,15 @@ class SHAPRecoveryExplainer:
         pos_snippets = [f"{f.feature_name} (+{f.impact_percent}%)" for f in top_positive[:2]]
         neg_snippets = [f"{f.feature_name} (-{f.impact_percent}%)" for f in top_negative[:2]]
 
-        narrative = f"{customer_name} has an estimated {recovery_prob_pct}% recovery probability."
-        
+        narrative = f"{customer_name} has an estimated {recovery_prob_pct}% recovery probability (XGBoost)."
+
         if pos_snippets:
             narrative += f" Key positive drivers include {', '.join(pos_snippets)}."
         if neg_snippets:
             narrative += f" Primary negative factors include {', '.join(neg_snippets)}."
 
         return narrative
+
 
 # Global Singleton Instance
 shap_service = SHAPRecoveryExplainer()
