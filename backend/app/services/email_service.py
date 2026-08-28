@@ -163,11 +163,18 @@ class EmailService:
                 # Rich HTML content
                 msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-                # Connect via SMTP + STARTTLS (Port 587)
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=12)
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
+                # Connect via SMTP: Try STARTTLS (587) or SSL (465)
+                try:
+                    if smtp_port == 465:
+                        server = smtplib.SMTP_SSL(smtp_host, 465, timeout=10)
+                    else:
+                        server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                        server.ehlo()
+                        server.starttls()
+                        server.ehlo()
+                except (OSError, smtplib.SMTPConnectError, socket.timeout):
+                    # Fallback to Port 465 SSL if 587 is blocked by hosting firewall
+                    server = smtplib.SMTP_SSL(smtp_host, 465, timeout=10)
 
                 # Authenticate with Gmail
                 server.login(smtp_user.strip(), smtp_password.strip())
@@ -279,10 +286,14 @@ class EmailService:
 
         if is_live_ready:
             try:
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
+                try:
+                    server = smtplib.SMTP(smtp_host, smtp_port, timeout=6)
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                except Exception:
+                    server = smtplib.SMTP_SSL(smtp_host, 465, timeout=6)
+
                 connection_status = "connected"
                 try:
                     server.login(smtp_user.strip(), smtp_password.strip())
@@ -298,7 +309,7 @@ class EmailService:
                         pass
             except Exception as conn_err:
                 connection_status = "failed"
-                diagnostic_message = f"Failed to connect to {smtp_host}:{smtp_port}: {str(conn_err)}"
+                diagnostic_message = f"Failed to connect to {smtp_host} on port {smtp_port}/465: {str(conn_err)}"
 
         return {
             "smtp_host": smtp_host,
