@@ -157,19 +157,19 @@ def get_current_admin(
 @router.post("/signup", response_model=SignupResponse)
 def signup(payload: SignupRequest):
     """
-    Registers a new user account with secure password hashing and dispatches a single-use verification link.
+    Registers a new user account with secure password hashing (immediately active for login).
     """
     try:
-        user, token = auth_service.register_user(
+        user, _ = auth_service.register_user(
             email=payload.email,
             password=payload.password,
             name=payload.name
         )
         return SignupResponse(
             success=True,
-            message="Account successfully created. Please check your email to verify your account.",
+            message="Account successfully created. You can now log in.",
             user=user.to_safe_dict(),
-            needs_email_verification=not user.email_verified
+            needs_email_verification=False
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

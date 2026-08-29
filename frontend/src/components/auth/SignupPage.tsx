@@ -42,16 +42,13 @@ export const SignupPage: React.FC<SignupPageProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const { needsEmailVerification } = await authStore.signup(name, email, password);
-      if (needsEmailVerification) {
-        onSuccess(email);
+      await authStore.signup(name, email, password);
+      // Immediately log in as account is active without email verification
+      const admin = await authStore.login(email, password);
+      if (onSuccessAdmin) {
+        onSuccessAdmin(admin);
       } else {
-        const activeAdmin = authStore.getAdmin();
-        if (activeAdmin && onSuccessAdmin) {
-          onSuccessAdmin(activeAdmin);
-        } else {
-          onSuccess(email);
-        }
+        onGoToLogin();
       }
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please check your credentials.');

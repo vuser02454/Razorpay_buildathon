@@ -170,7 +170,7 @@ class AuthService:
         if clean_email in self._email_to_id:
             raise ValueError("An account with this email address already exists.")
 
-        # 3. Create User
+        # 3. Create User (immediately active and verified)
         user_id = f"usr_{secrets.token_hex(8)}"
         pwd_hash = hash_password(password)
         user = UserRecord(
@@ -179,7 +179,7 @@ class AuthService:
             name=clean_name,
             password_hash=pwd_hash,
             role="ADMIN",
-            email_verified=False,
+            email_verified=True,
             is_active=True
         )
 
@@ -196,27 +196,15 @@ class AuthService:
                     "name": user.name,
                     "password_hash": user.password_hash,
                     "role": user.role,
-                    "email_verified": user.email_verified,
+                    "email_verified": True,
                     "created_at": user.created_at
                 }).execute()
             except Exception as e:
                 logger.warning(f"[AuthService] Note on Supabase PostgreSQL table sync: {e}")
 
-        # 5. Generate single-use verification token (24-hour expiry)
-        token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-        self._verification_tokens[token] = {
-            "token": token,
-            "user_id": user_id,
-            "email": clean_email,
-            "expires_at": expires_at.isoformat(),
-            "used": False
-        }
-
-        # 6. Send verification email via EmailJS (or fallback transport)
-        self._dispatch_verification_email(user=user, token=token)
-
-        return user, token
+        # Note: Email verification is intentionally disabled (Option A)
+        # Account is immediately usable for authentication.
+        return user, ""
 
     def _dispatch_verification_email(self, user: UserRecord, token: str) -> Dict[str, Any]:
         """
@@ -373,13 +361,6 @@ class AuthService:
 
         if not verify_password(password, user.password_hash):
             raise ValueError("Email or password is incorrect.")
-
-        if not user.email_verified and not getattr(user, "is_demo", False) and user.id != "admin_demo_001":
-            # Account is unverified
-            err = ValueError("Please verify your email before logging in.")
-            setattr(err, "unverified", True)
-            setattr(err, "email", user.email)
-            raise err
 
         # Create authenticated backend session (7-day validity)
         session_token = f"sess_{secrets.token_urlsafe(32)}"
