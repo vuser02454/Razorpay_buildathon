@@ -490,34 +490,12 @@ class AuthService:
 
         logger.info(f"[AuthService] Dispatching password reset email to {clean_recipient}")
 
-        if EmailJSProvider.is_configured():
-            return EmailJSProvider.send_transactional(
-                to_email=clean_recipient,
-                subject=subject,
-                template_params=template_params,
-                email_type="PASSWORD_RESET"
-            )
-        else:
-            html_body = f"""
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
-                <h2 style="color: #0f172a;">Reset your RecoverAI Password</h2>
-                <p>Hello {user.name},</p>
-                <p>A password reset request was received for your account. Click the button below to choose a new password:</p>
-                <div style="margin: 24px 0;">
-                    <a href="{reset_link}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                        Reset My Password
-                    </a>
-                </div>
-                <p style="color: #64748b; font-size: 13px;">This link will expire in 1 hour. Link: {reset_link}</p>
-            </div>
-            """
-            return EmailService._dispatch(
-                to_email=user.email,
-                subject=subject,
-                html_content=html_body,
-                text_content=f"Reset your RecoverAI password: {reset_link}",
-                email_type="PASSWORD_RESET"
-            )
+        return EmailJSProvider.send_transactional(
+            to_email=clean_recipient,
+            subject=subject,
+            template_params=template_params,
+            email_type="PASSWORD_RESET"
+        )
 
     def reset_password(self, token: str, new_password: str) -> Tuple[bool, str]:
         """

@@ -19,7 +19,7 @@ class EmailJSProvider:
 
     Safety & Security Invariants:
     1. Zero authentication tokens, passwords, or Supabase verification links are routed here.
-    2. Transports only non-sensitive application transactional notifications.
+    2. Transports only non-sensitive application transactional notifications and password resets.
     3. Never logs or leaks API keys, private keys (accessToken), CVVs, or card credentials.
     4. Automatically falls back to simulated sandbox delivery when credentials are not configured,
        ensuring uninterrupted local development and testing.
@@ -30,11 +30,16 @@ class EmailJSProvider:
 
     @classmethod
     def is_configured(cls) -> bool:
-        """Checks if EmailJS credentials are fully configured."""
-        service_id = os.getenv("EMAILJS_SERVICE_ID") or getattr(settings, "EMAILJS_SERVICE_ID", "")
-        template_id = os.getenv("EMAILJS_TEMPLATE_ID") or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
-        public_key = os.getenv("EMAILJS_PUBLIC_KEY") or getattr(settings, "EMAILJS_PUBLIC_KEY", "")
-        return bool(service_id and template_id and public_key)
+        """Checks if EmailJS credentials are configured."""
+        service_id = (os.getenv("EMAILJS_SERVICE_ID") or getattr(settings, "EMAILJS_SERVICE_ID", "")).strip()
+        public_key = (os.getenv("EMAILJS_PUBLIC_KEY") or getattr(settings, "EMAILJS_PUBLIC_KEY", "")).strip()
+        has_template = bool(
+            os.getenv("EMAILJS_TEMPLATE_PASSWORD_RESET_ID")
+            or getattr(settings, "EMAILJS_TEMPLATE_PASSWORD_RESET_ID", "")
+            or os.getenv("EMAILJS_TEMPLATE_ID")
+            or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
+        )
+        return bool(service_id and public_key and has_template)
 
     @classmethod
     def get_template_id_for_type(cls, email_type: Union[EmailType, str]) -> str:
@@ -43,51 +48,49 @@ class EmailJSProvider:
         type_str_lower = type_str.lower()
 
         if "reset" in type_str_lower or "password" in type_str_lower:
-            return (
+            template_id = (
                 os.getenv("EMAILJS_TEMPLATE_PASSWORD_RESET_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_PASSWORD_RESET_ID", "")
-                or os.getenv("EMAILJS_TEMPLATE_PASSWORD_MANAGEMENT_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_PASSWORD_MANAGEMENT_ID", "")
                 or os.getenv("EMAILJS_TEMPLATE_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_password_management")
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
             )
+            return template_id.strip() if template_id else ""
         elif "verify" in type_str_lower or "verification" in type_str_lower:
-            return (
+            template_id = (
                 os.getenv("EMAILJS_TEMPLATE_VERIFY_EMAIL_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_VERIFY_EMAIL_ID", "")
-                or os.getenv("EMAILJS_TEMPLATE_VERIFICATION_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_VERIFICATION_ID", "")
                 or os.getenv("EMAILJS_TEMPLATE_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_email_verification")
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
             )
+            return template_id.strip() if template_id else ""
         elif "failed" in type_str_lower:
             return (
                 os.getenv("EMAILJS_TEMPLATE_PAYMENT_FAILED_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_PAYMENT_FAILED_ID", "")
                 or os.getenv("EMAILJS_TEMPLATE_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_payment_failed")
-            )
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
+            ).strip()
         elif "recovered" in type_str_lower:
             return (
                 os.getenv("EMAILJS_TEMPLATE_RECOVERY_SUCCESS_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_RECOVERY_SUCCESS_ID", "")
                 or os.getenv("EMAILJS_TEMPLATE_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_recovery_success")
-            )
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
+            ).strip()
         elif "human" in type_str_lower or "admin" in type_str_lower:
             return (
                 os.getenv("EMAILJS_TEMPLATE_ADMIN_NOTICE_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_ADMIN_NOTICE_ID", "")
                 or os.getenv("EMAILJS_TEMPLATE_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_admin_notification")
-            )
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
+            ).strip()
         else:
             return (
                 os.getenv("EMAILJS_TEMPLATE_ACTION_REQUIRED_ID")
                 or getattr(settings, "EMAILJS_TEMPLATE_ACTION_REQUIRED_ID", "")
                 or os.getenv("EMAILJS_TEMPLATE_ID")
-                or getattr(settings, "EMAILJS_TEMPLATE_ID", "template_action_required")
-            )
+                or getattr(settings, "EMAILJS_TEMPLATE_ID", "")
+            ).strip()
 
     @classmethod
     def send_transactional(
@@ -122,10 +125,23 @@ class EmailJSProvider:
                 "diagnostic_error": "Recipient email failed regex validation."
             }
 
-        service_id = os.getenv("EMAILJS_SERVICE_ID") or getattr(settings, "EMAILJS_SERVICE_ID", "")
-        template_id = custom_template_id or cls.get_template_id_for_type(email_type)
-        public_key = os.getenv("EMAILJS_PUBLIC_KEY") or getattr(settings, "EMAILJS_PUBLIC_KEY", "")
-        private_key = os.getenv("EMAILJS_PRIVATE_KEY") or getattr(settings, "EMAILJS_PRIVATE_KEY", "")
+        service_id = (os.getenv("EMAILJS_SERVICE_ID") or getattr(settings, "EMAILJS_SERVICE_ID", "")).strip()
+        template_id = (custom_template_id or cls.get_template_id_for_type(email_type)).strip()
+        public_key = (os.getenv("EMAILJS_PUBLIC_KEY") or getattr(settings, "EMAILJS_PUBLIC_KEY", "")).strip()
+        private_key = (os.getenv("EMAILJS_PRIVATE_KEY") or getattr(settings, "EMAILJS_PRIVATE_KEY", "")).strip()
+
+        # Check for missing required variables in production
+        missing_vars = []
+        if not service_id:
+            missing_vars.append("EMAILJS_SERVICE_ID")
+        if not template_id:
+            missing_vars.append("EMAILJS_TEMPLATE_PASSWORD_RESET_ID" if "reset" in type_str_lower else "EMAILJS_TEMPLATE_ID")
+        if not public_key:
+            missing_vars.append("EMAILJS_PUBLIC_KEY")
+        if not private_key:
+            missing_vars.append("EMAILJS_PRIVATE_KEY")
+
+        recipient_domain = to_email.split("@")[-1] if "@" in to_email else "unknown"
 
         # Enrich template parameters with canonical variables
         params = dict(template_params)
@@ -143,14 +159,20 @@ class EmailJSProvider:
 
         # 2. Live dispatch if credentials exist
         if service_id and template_id and public_key:
+            logger.info(
+                f"[EmailJS] Dispatching request to endpoint='{cls.EMAILJS_SEND_URL}' | "
+                f"service_id='{service_id}' | template_id='{template_id}' | "
+                f"recipient_domain='@{recipient_domain}' | email_type='{type_str}'"
+            )
+
             payload = {
-                "service_id": service_id.strip(),
-                "template_id": template_id.strip(),
-                "user_id": public_key.strip(),
+                "service_id": service_id,
+                "template_id": template_id,
+                "user_id": public_key,
                 "template_params": params
             }
-            if private_key and private_key.strip():
-                payload["accessToken"] = private_key.strip()
+            if private_key:
+                payload["accessToken"] = private_key
 
             try:
                 headers = {"Content-Type": "application/json"}
@@ -159,7 +181,10 @@ class EmailJSProvider:
                 
                 if resp.status_code == 200:
                     msg_id = f"emailjs_{uuid.uuid4().hex[:12]}"
-                    logger.info(f"[EmailJS] Dispatched email {type_str} to {to_email} (MsgID: {msg_id})")
+                    logger.info(
+                        f"[EmailJS] Live dispatch SUCCESS [HTTP 200] for domain @{recipient_domain} | "
+                        f"service_id='{service_id}' | template_id='{template_id}' | msg_id='{msg_id}'"
+                    )
                     return {
                         "success": True,
                         "email_type": type_str,
@@ -173,8 +198,12 @@ class EmailJSProvider:
                         "diagnostic_error": None
                     }
                 else:
-                    err_text = resp.text[:200]
-                    logger.error(f"[EmailJS] Live dispatch failed [{resp.status_code}]: {err_text}")
+                    err_text = resp.text.strip()[:200]
+                    logger.error(
+                        f"[EmailJS] Live dispatch FAILED [HTTP {resp.status_code}] | "
+                        f"service_id='{service_id}' | template_id='{template_id}' | "
+                        f"recipient_domain='@{recipient_domain}' | error_response='{err_text}'"
+                    )
                     return {
                         "success": False,
                         "email_type": type_str,
@@ -188,7 +217,10 @@ class EmailJSProvider:
                         "diagnostic_error": f"EmailJS API returned status {resp.status_code}: {err_text}"
                     }
             except Exception as exc:
-                logger.error(f"[EmailJS] Connection exception: {exc}")
+                logger.error(
+                    f"[EmailJS] Connection exception for domain @{recipient_domain}: "
+                    f"{type(exc).__name__}: {str(exc)}"
+                )
                 return {
                     "success": False,
                     "email_type": type_str,
@@ -202,9 +234,26 @@ class EmailJSProvider:
                     "diagnostic_error": f"EmailJS request error: {str(exc)}"
                 }
 
-        # 3. Graceful Sandbox Simulation Mode
+        # If missing variables in production/deployed environment
+        if missing_vars and (os.getenv("RENDER") or os.getenv("VERCEL") or service_id or public_key or private_key):
+            config_msg = f"{', '.join(missing_vars)} is not configured"
+            logger.warning(f"[EmailJS] Configuration missing: {config_msg}")
+            return {
+                "success": False,
+                "email_type": type_str,
+                "recipient": to_email,
+                "message_id": None,
+                "provider": "emailjs",
+                "timestamp": now_str,
+                "status": "FAILED",
+                "mode": "live",
+                "error": f"Email service configuration incomplete: {config_msg}.",
+                "diagnostic_error": f"Missing required environment variables: {config_msg}."
+            }
+
+        # 3. Graceful Sandbox Simulation Mode (Local Development only)
         mock_msg_id = f"emailjs_sandbox_{uuid.uuid4().hex[:12]}"
-        logger.info(f"[EmailJS] Simulated sandbox delivery to {to_email} (MsgID: {mock_msg_id})")
+        logger.info(f"[EmailJS] Simulated sandbox delivery to domain @{recipient_domain} (MsgID: {mock_msg_id})")
         return {
             "success": True,
             "email_type": type_str,
