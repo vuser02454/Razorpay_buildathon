@@ -6,6 +6,7 @@ from app.main import app
 from app.services.auth_service import (
     auth_service, hash_password, verify_password, UserRecord
 )
+from app.services.emailjs_provider import EmailJSProvider
 from app.api.auth import DEMO_ADMIN
 
 
@@ -180,7 +181,7 @@ def test_logout_invalidates_session(client):
 
 
 # ═════════════════════════════════════════════════════════════════════════
-# ─── 5. Password Reset Tests (EmailJS Password Management) ──────────────
+# ─── 5. Password Reset & EmailJS Integration Tests ──────────────────────
 # ═════════════════════════════════════════════════════════════════════════
 
 def test_forgot_password_privacy_non_revealing(client):
@@ -193,9 +194,37 @@ def test_forgot_password_privacy_non_revealing(client):
     assert "If an account with this email exists" in response.json()["message"]
 
 
+def test_emailjs_is_configured_checks_all_four_variables():
+    """Test 9: Verify is_configured requires all 4 variables: service, public_key, private_key, template."""
+    with patch.dict("os.environ", {
+        "EMAILJS_SERVICE_ID": "service_test",
+        "EMAILJS_PUBLIC_KEY": "public_test",
+        "EMAILJS_PRIVATE_KEY": "private_test",
+        "EMAILJS_TEMPLATE_PASSWORD_RESET_ID": "template_reset_test"
+    }, clear=True):
+        assert EmailJSProvider.is_configured() is True
+
+    # Missing private_key -> False
+    with patch.dict("os.environ", {
+        "EMAILJS_SERVICE_ID": "service_test",
+        "EMAILJS_PUBLIC_KEY": "public_test",
+        "EMAILJS_TEMPLATE_PASSWORD_RESET_ID": "template_reset_test"
+    }, clear=True):
+        assert EmailJSProvider.is_configured() is False
+
+
+def test_emailjs_get_template_id_for_password_reset():
+    """Test 10: Verify get_template_id_for_type resolves to EMAILJS_TEMPLATE_PASSWORD_RESET_ID."""
+    with patch.dict("os.environ", {
+        "EMAILJS_TEMPLATE_PASSWORD_RESET_ID": "template_pwd_reset_exact_123"
+    }, clear=True):
+        res = EmailJSProvider.get_template_id_for_type("PASSWORD_RESET")
+        assert res == "template_pwd_reset_exact_123"
+
+
 def test_forgot_password_and_reset_flow(client):
     """
-    Test 9: Password reset flow:
+    Test 11: Password reset flow:
     - Calls EmailJS using EMAILJS_TEMPLATE_PASSWORD_RESET_ID
     - Sends to exact user.email
     - Canonical params: to_email, to_name, reset_link, subject
@@ -208,23 +237,22 @@ def test_forgot_password_and_reset_flow(client):
     login_res = auth_service.authenticate_user(email=reset_email, password="OldPassword123!")
     old_session = login_res[1]
 
-    with patch("app.services.emailjs_provider.EmailJSProvider.is_configured", return_value=True):
-        with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
-            mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
+    with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+        mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
 
-            # Request reset
-            res_req = client.post("/api/auth/forgot-password", json={"email": reset_email})
-            assert res_req.status_code == 200
+        # Request reset
+        res_req = client.post("/api/auth/forgot-password", json={"email": reset_email})
+        assert res_req.status_code == 200
 
-            # Verify recipient was reset_email and canonical variables
-            mock_emailjs.assert_called_once()
-            called_args = mock_emailjs.call_args[1]
-            assert called_args["to_email"] == reset_email
-            assert called_args["template_params"]["to_email"] == reset_email
-            assert called_args["template_params"]["to_name"] == "Reset User"
-            assert "reset_link" in called_args["template_params"]
-            assert "verification_link" not in called_args["template_params"]
-            assert "reset-password?token=" in called_args["template_params"]["reset_link"]
+        # Verify recipient was reset_email and canonical variables
+        mock_emailjs.assert_called_once()
+        called_args = mock_emailjs.call_args[1]
+        assert called_args["to_email"] == reset_email
+        assert called_args["template_params"]["to_email"] == reset_email
+        assert called_args["template_params"]["to_name"] == "Reset User"
+        assert "reset_link" in called_args["template_params"]
+        assert "verification_link" not in called_args["template_params"]
+        assert "reset-password?token=" in called_args["template_params"]["reset_link"]
 
     # Extract reset token from store
     active_reset_tokens = [tok for tok, t in auth_service._reset_tokens.items() if t["email"] == reset_email and not t["used"]]
@@ -252,8 +280,85 @@ def test_forgot_password_and_reset_flow(client):
     assert new_session is not None
 
 
+def test_emailjs_live_http_200_success(client):
+    """Test 12: Live EmailJS call returning HTTP 200 dispatches cleanly."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "OK"
+
+    user_email = "live.emailjs.success@example.com"
+    auth_service.register_user(email=user_email, password="Password123!", name="Live User")
+
+    mock_client_instance = MagicMock()
+    mock_client_instance.__enter__.return_value = mock_client_instance
+    mock_client_instance.post.return_value = mock_resp
+
+    with patch("app.services.emailjs_provider.httpx.Client", return_value=mock_client_instance):
+        with patch.dict("os.environ", {
+            "EMAILJS_SERVICE_ID": "service_11cw53d",
+            "EMAILJS_PUBLIC_KEY": "pub_key_mock",
+            "EMAILJS_PRIVATE_KEY": "priv_key_mock",
+            "EMAILJS_TEMPLATE_PASSWORD_RESET_ID": "template_reset_live"
+        }):
+            res = client.post("/api/auth/forgot-password", json={"email": user_email})
+            assert res.status_code == 200
+            assert mock_client_instance.post.called
+
+            # Check payload
+            call_kwargs = mock_client_instance.post.call_args[1]
+            payload = call_kwargs["json"]
+            assert payload["service_id"] == "service_11cw53d"
+            assert payload["template_id"] == "template_reset_live"
+            assert payload["user_id"] == "pub_key_mock"
+            assert payload["accessToken"] == "priv_key_mock"
+            assert payload["template_params"]["to_email"] == user_email
+            assert payload["template_params"]["subject"] == "⚡ Reset your RecoverAI Password"
+
+
+def test_emailjs_live_http_400_or_403_fails_endpoint(client):
+    """Test 13: Live EmailJS call returning HTTP 400/403 causes /forgot-password to fail with 500."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 400
+    mock_resp.text = "Invalid user_id parameter"
+
+    fail_email = "fail.emailjs@example.com"
+    auth_service.register_user(email=fail_email, password="Password123!", name="Fail User")
+
+    mock_client_instance = MagicMock()
+    mock_client_instance.__enter__.return_value = mock_client_instance
+    mock_client_instance.post.return_value = mock_resp
+
+    with patch("app.services.emailjs_provider.httpx.Client", return_value=mock_client_instance):
+        with patch.dict("os.environ", {
+            "EMAILJS_SERVICE_ID": "service_11cw53d",
+            "EMAILJS_PUBLIC_KEY": "pub_key_mock",
+            "EMAILJS_PRIVATE_KEY": "priv_key_mock",
+            "EMAILJS_TEMPLATE_PASSWORD_RESET_ID": "template_reset_live"
+        }):
+            res = client.post("/api/auth/forgot-password", json={"email": fail_email})
+            assert res.status_code == 500
+            assert "We couldn't send your email right now" in res.json()["detail"]
+
+
+def test_missing_emailjs_env_var_in_production_fails_truthfully(client):
+    """Test 14: In production deployment (e.g. Render), missing service ID or template ID fails truthfully."""
+    render_email = "render.missing.key@example.com"
+    auth_service.register_user(email=render_email, password="Password123!", name="Render User")
+
+    with patch.dict("os.environ", {
+        "RENDER": "true",
+        "EMAILJS_SERVICE_ID": "", # Missing service ID
+        "EMAILJS_PUBLIC_KEY": "pub_key_mock",
+        "EMAILJS_TEMPLATE_PASSWORD_RESET_ID": "template_reset_live",
+        "EMAILJS_PRIVATE_KEY": "priv_key_mock"
+    }, clear=True):
+        res = client.post("/api/auth/forgot-password", json={"email": render_email})
+        assert res.status_code == 500
+        assert "We couldn't send your email right now" in res.json()["detail"]
+
+
 def test_used_reset_token_cannot_be_reused(client):
-    """Test 10: Used reset token cannot be reused."""
+    """Test 15: Used reset token cannot be reused."""
     re_email = "reuse.token@example.com"
     auth_service.register_user(email=re_email, password="OldPassword123!", name="Re User")
 
@@ -275,25 +380,24 @@ def test_used_reset_token_cannot_be_reused(client):
 # ═════════════════════════════════════════════════════════════════════════
 
 def test_enterprise_corp_in_never_used_in_auth(client):
-    """Test 11: Verify enterprise@corp.in and admin email never leak as fallback in password reset."""
+    """Test 16: Verify enterprise@corp.in and admin email never leak as fallback in password reset."""
     custom_email = "target.user.exclusive@gmail.com"
     auth_service.register_user(email=custom_email, password="Password123!", name="Custom User")
 
-    with patch("app.services.emailjs_provider.EmailJSProvider.is_configured", return_value=True):
-        with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
-            mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
+    with patch("app.services.emailjs_provider.EmailJSProvider.send_transactional") as mock_emailjs:
+        mock_emailjs.return_value = {"success": True, "provider": "emailjs", "status": "SENT"}
 
-            client.post("/api/auth/forgot-password", json={"email": custom_email})
+        client.post("/api/auth/forgot-password", json={"email": custom_email})
 
-            mock_emailjs.assert_called_once()
-            called_args = mock_emailjs.call_args[1]
-            assert called_args["to_email"] == custom_email
-            assert called_args["to_email"] != "enterprise@corp.in"
-            assert called_args["to_email"] != "demo@recoverai.ai"
+        mock_emailjs.assert_called_once()
+        called_args = mock_emailjs.call_args[1]
+        assert called_args["to_email"] == custom_email
+        assert called_args["to_email"] != "enterprise@corp.in"
+        assert called_args["to_email"] != "demo@recoverai.ai"
 
 
 def test_demo_login_endpoint(client):
-    """Test 12: 1-Click Demo Login endpoint returns demo session."""
+    """Test 17: 1-Click Demo Login endpoint returns demo session."""
     res = client.post("/api/auth/demo")
     assert res.status_code == 200
     data = res.json()
@@ -303,7 +407,7 @@ def test_demo_login_endpoint(client):
 
 
 def test_supabase_auth_never_called_during_custom_auth(client):
-    """Test 13: Verify Supabase Auth SDK is never invoked during any auth operations."""
+    """Test 18: Verify Supabase Auth SDK is never invoked during any auth operations."""
     with patch("supabase.client.Client.auth", create=True) as mock_sb_auth:
         # 1. Signup
         signup_res = client.post(
@@ -333,7 +437,7 @@ def test_supabase_auth_never_called_during_custom_auth(client):
 
 
 def test_emailjs_private_key_never_exposed_in_client_responses(client):
-    """Test 14: Verify private keys, secrets, and password hashes never leak in client responses."""
+    """Test 19: Verify private keys, secrets, and password hashes never leak in client responses."""
     with patch.dict("os.environ", {"EMAILJS_PRIVATE_KEY": "super_secret_private_emailjs_key"}):
         res_signup = client.post(
             "/api/auth/signup",

@@ -143,6 +143,44 @@ class AuthService:
                 logger.warning(f"[AuthService] Supabase PostgreSQL client connection notice: {e}")
         return None
 
+    def get_user_by_email(self, email: str) -> Optional[UserRecord]:
+        """
+        Retrieves a user by email from memory cache or Supabase PostgreSQL 'users' table.
+        Ensures persistent account recovery across backend restarts and workers.
+        """
+        if not email:
+            return None
+        clean_email = email.lower().strip()
+        user_id = self._email_to_id.get(clean_email)
+        if user_id and user_id in self._users:
+            return self._users[user_id]
+
+        # Query Supabase PostgreSQL if configured
+        sb = self._get_supabase_client()
+        if sb:
+            try:
+                resp = sb.table("users").select("*").eq("email", clean_email).limit(1).execute()
+                if resp.data and len(resp.data) > 0:
+                    row = resp.data[0]
+                    user = UserRecord(
+                        id=row.get("id"),
+                        email=row.get("email"),
+                        name=row.get("name") or row.get("email", "").split("@")[0],
+                        password_hash=row.get("password_hash"),
+                        role=row.get("role", "ADMIN"),
+                        email_verified=row.get("email_verified", True),
+                        is_active=row.get("is_active", True),
+                        created_at=row.get("created_at"),
+                        updated_at=row.get("updated_at")
+                    )
+                    self._users[user.id] = user
+                    self._email_to_id[clean_email] = user.id
+                    return user
+            except Exception as e:
+                logger.warning(f"[AuthService] Supabase PostgreSQL lookup error for email: {e}")
+
+        return None
+
     # ─────────────────────────────────────────────────────────────────────
     # ── User Registration ────────────────────────────────────────────────
     # ─────────────────────────────────────────────────────────────────────
@@ -155,7 +193,7 @@ class AuthService:
     ) -> Tuple[UserRecord, str]:
         """
         Creates a new user account with secure password hashing,
-        marks email_verified = False, and generates a single-use verification token.
+        marks email_verified = True, and stores in memory and Supabase PostgreSQL.
         """
         clean_email = email.lower().strip()
         clean_name = (name or "").strip() or clean_email.split('@')[0]
@@ -167,7 +205,7 @@ class AuthService:
             raise ValueError("Password must be at least 6 characters.")
 
         # 2. Check Duplicate Account
-        if clean_email in self._email_to_id:
+        if self.get_user_by_email(clean_email):
             raise ValueError("An account with this email address already exists.")
 
         # 3. Create User (immediately active and verified)
@@ -347,15 +385,14 @@ class AuthService:
         user_agent: Optional[str] = None
     ) -> Tuple[UserRecord, str]:
         """
-        Authenticates credentials, verifies account status and email confirmation,
+        Authenticates credentials against memory cache or Supabase PostgreSQL,
         creates a secure server-controlled session, and returns the UserRecord and Session Token.
         """
         clean_email = email.lower().strip()
-        user_id = self._email_to_id.get(clean_email)
-        if not user_id or user_id not in self._users:
+        user = self.get_user_by_email(clean_email)
+        if not user:
             raise ValueError("Email or password is incorrect.")
 
-        user = self._users[user_id]
         if not user.is_active:
             raise ValueError("This account has been deactivated. Please contact support.")
 
@@ -410,7 +447,12 @@ class AuthService:
                 pass
 
         user_id = session_data.get("user_id")
-        return self._users.get(user_id)
+        user = self._users.get(user_id)
+        if not user:
+            user_email = session_data.get("email")
+            if user_email:
+                user = self.get_user_by_email(user_email)
+        return user
 
     def invalidate_session(self, session_token: str) -> bool:
         """Destroys an active session on logout."""
@@ -432,19 +474,19 @@ class AuthService:
     # ── Password Reset Flow ──────────────────────────────────────────────
     # ─────────────────────────────────────────────────────────────────────
 
-    def request_password_reset(self, email: str) -> bool:
+    def request_password_reset(self, email: str) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Initiates password reset without leaking account existence.
         Generates single-use reset token and dispatches reset email if account exists.
+        Returns (email_sent, user_message, delivery_info).
         """
         clean_email = email.lower().strip()
-        user_id = self._email_to_id.get(clean_email)
-        if not user_id or user_id not in self._users:
-            # Constant-time return to prevent user enumeration
-            logger.info(f"[AuthService] Password reset requested for non-existent email {clean_email}")
-            return True
+        user = self.get_user_by_email(clean_email)
+        if not user:
+            recipient_domain = clean_email.split("@")[-1] if "@" in clean_email else "unknown"
+            logger.info(f"[AuthService] Password reset requested for non-existent account @{recipient_domain}")
+            return False, "If an account with this email exists, a password reset link has been sent.", {"status": "SKIPPED_NOT_FOUND"}
 
-        user = self._users[user_id]
         token = secrets.token_urlsafe(32)
         expires_at = datetime.now(timezone.utc) + timedelta(hours=1) # 1-hour expiry
 
@@ -457,8 +499,9 @@ class AuthService:
         }
 
         # Dispatch reset email
-        self._dispatch_password_reset_email(user=user, token=token)
-        return True
+        delivery_res = self._dispatch_password_reset_email(user=user, token=token)
+        is_success = bool(delivery_res.get("success", False))
+        return is_success, "If an account with this email exists, a password reset link has been sent.", delivery_res
 
     def _dispatch_password_reset_email(self, user: UserRecord, token: str) -> Dict[str, Any]:
         """
@@ -488,7 +531,8 @@ class AuthService:
             "subject": subject
         }
 
-        logger.info(f"[AuthService] Dispatching password reset email to {clean_recipient}")
+        recipient_domain = clean_recipient.split("@")[-1] if "@" in clean_recipient else "unknown"
+        logger.info(f"[AuthService] Initiating password reset email dispatch for domain @{recipient_domain}")
 
         return EmailJSProvider.send_transactional(
             to_email=clean_recipient,

@@ -318,12 +318,18 @@ def logout(
 @router.post("/forgot-password", response_model=GenericAuthResponse)
 def forgot_password(payload: ForgotPasswordRequest):
     """
-    Requests a password reset link. Returns a generic privacy-safe response to prevent user enumeration.
+    Requests a password reset link. Dispatches via EmailJS Password Reset template.
     """
-    auth_service.request_password_reset(payload.email)
+    _, message, delivery = auth_service.request_password_reset(payload.email)
+    
+    # If dispatch explicitly failed (e.g. missing EmailJS configuration or provider rejection)
+    if delivery.get("status") == "FAILED":
+        err_msg = delivery.get("error") or "Failed to send password reset email. Please try again later."
+        raise HTTPException(status_code=500, detail=err_msg)
+
     return GenericAuthResponse(
         success=True,
-        message="If an account with this email exists, a password reset link has been sent."
+        message=message
     )
 
 
