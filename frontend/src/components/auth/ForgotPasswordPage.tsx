@@ -207,7 +207,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({
       <footer className={`relative z-10 w-full text-center py-4 px-4 text-[11px] font-mono ${
         isDarkMode ? 'text-slate-500' : 'text-slate-600'
       }`}>
-        RecoverAI &bull; Protected by Supabase Authentication
+        RecoverAI &bull; Secure Session Authentication
       </footer>
     </div>
   );
